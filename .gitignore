@@ -1,0 +1,54 @@
+# Esta es una configuración recomendada de .gitignore para Unity
+
+# Carpetas generadas que no necesitas versionar
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+
+# Archivos de memoria caché de Unity
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+
+# Archivos específicos de Unity que no necesitas versionar
+*.unity.meta
+sysinfo.txt
+*.stackdump
+
+# Carpeta de respaldo creada por herramientas como Rider
+.idea/
+
+# Archivos específicos de VS/VS Code
+.vs/
+.vscode/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.opendb
+*.VC.db
+
+# Crashlytics
+crashlytics-build.properties
+
+# Otros archivos y carpetas específicos que pueden ocupar mucho espacio
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+/[Cc]aptures/
+/[Aa]ssets/AssetStoreTools*
+/[Aa]ssets/Plugins/Editor/JetBrains*
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
