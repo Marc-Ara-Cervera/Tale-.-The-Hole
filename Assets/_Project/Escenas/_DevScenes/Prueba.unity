@@ -229,8 +229,13 @@ GameObject:
   - component: {fileID: 65426919}
   - component: {fileID: 65426918}
   - component: {fileID: 65426923}
-  - component: {fileID: 65426922}
+  - component: {fileID: 65426927}
   - component: {fileID: 65426924}
+  - component: {fileID: 65426926}
+  - component: {fileID: 65426931}
+  - component: {fileID: 65426930}
+  - component: {fileID: 65426929}
+  - component: {fileID: 65426928}
   m_Layer: 0
   m_Name: XR Origin (Jugador)
   m_TagString: Untagged
@@ -311,50 +316,6 @@ CharacterController:
   m_SkinWidth: 0.08
   m_MinMoveDistance: 0.0001
   m_Center: {x: 0, y: 1, z: 0}
---- !u!114 &65426922
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 65426917}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0bf296fc962d7184ab14ad1841598d5f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_System: {fileID: 65426923}
-  m_MoveSpeed: 0.8
-  m_EnableStrafe: 1
-  m_EnableFly: 0
-  m_UseGravity: 1
-  m_GravityApplicationMode: 1
-  m_ForwardSource: {fileID: 1182656404}
-  m_LeftHandMoveAction:
-    m_UseReference: 1
-    m_Action:
-      m_Name: Left Hand Move
-      m_Type: 0
-      m_ExpectedControlType: Vector2
-      m_Id: dc8d7ad6-813c-43ba-9499-ae326f07fec4
-      m_Processors: 
-      m_Interactions: 
-      m_SingletonActionBindings: []
-      m_Flags: 0
-    m_Reference: {fileID: 6972639530819350904, guid: c348712bda248c246b8c49b3db54643f,
-      type: 3}
-  m_RightHandMoveAction:
-    m_UseReference: 1
-    m_Action:
-      m_Name: Right Hand Move
-      m_Type: 0
-      m_ExpectedControlType: Vector2
-      m_Id: 22716cda-be8e-43d0-8c38-bfd0a5c10363
-      m_Processors: 
-      m_Interactions: 
-      m_SingletonActionBindings: []
-      m_Flags: 0
-    m_Reference: {fileID: 0}
 --- !u!114 &65426923
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -424,9 +385,148 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: af6bf904e410ee8479f9093d8830d1f8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_LocomotionProvider: {fileID: 65426922}
+  m_LocomotionProvider: {fileID: 0}
   m_MinHeight: 0.1
   m_MaxHeight: Infinity
+--- !u!114 &65426926
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 65426917}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1a21d6f1826097542ab4973f4e274e25, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!114 &65426927
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 65426917}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0036d75707f7e4b4aa070e310d43a38a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_System: {fileID: 65426923}
+  m_MoveSpeed: 1
+  m_EnableStrafe: 1
+  m_EnableFly: 0
+  m_UseGravity: 1
+  m_GravityApplicationMode: 1
+  m_ForwardSource: {fileID: 1182656404}
+  m_LeftHandMoveAction:
+    m_UseReference: 1
+    m_Action:
+      m_Name: Left Hand Move
+      m_Type: 0
+      m_ExpectedControlType: Vector2
+      m_Id: 23dbff52-ee49-45b4-8e15-abcf6086cd82
+      m_Processors: 
+      m_Interactions: 
+      m_SingletonActionBindings: []
+      m_Flags: 0
+    m_Reference: {fileID: 6972639530819350904, guid: c348712bda248c246b8c49b3db54643f,
+      type: 3}
+  m_RightHandMoveAction:
+    m_UseReference: 1
+    m_Action:
+      m_Name: Right Hand Move
+      m_Type: 0
+      m_ExpectedControlType: Vector2
+      m_Id: f2329c60-604e-4f04-b64d-1bd26c7361dd
+      m_Processors: 
+      m_Interactions: 
+      m_SingletonActionBindings: []
+      m_Flags: 0
+    m_Reference: {fileID: 0}
+  m_SprintAction:
+    m_UseReference: 1
+    m_Action:
+      m_Name: Sprint
+      m_Type: 0
+      m_ExpectedControlType: Button
+      m_Id: f53bf7be-c467-40c2-a522-4f7bb39406aa
+      m_Processors: 
+      m_Interactions: 
+      m_SingletonActionBindings: []
+      m_Flags: 0
+    m_Reference: {fileID: -335775248641796371, guid: c348712bda248c246b8c49b3db54643f,
+      type: 3}
+  m_SprintSpeedMultiplier: 2
+  m_DebugMode: 1
+--- !u!114 &65426928
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 65426917}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2d8a1a83e47478e4289d8c3160f45b8a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  maxValue: 100
+  currentValue: 0
+  regenerationRate: 10
+  autoRegenerate: 0
+  currentLevel: 1
+  experienceToNextLevel: 100
+  experienceLevelMultiplier: 1.5
+--- !u!114 &65426929
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 65426917}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 08ec45c2d2d380b499528e8335b019eb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  maxValue: 100
+  currentValue: 0
+  regenerationRate: 10
+  autoRegenerate: 1
+  sprintCostPerSecond: 10
+--- !u!114 &65426930
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 65426917}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dacc9fde9a4534548a9758123710ff4a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  maxValue: 100
+  currentValue: 0
+  regenerationRate: 5
+  autoRegenerate: 1
+--- !u!114 &65426931
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 65426917}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e8016b8ffcacc6543a4be21dfb6a473f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  maxValue: 100
+  currentValue: 0
+  regenerationRate: 10
+  autoRegenerate: 0
 --- !u!1 &199920825
 GameObject:
   m_ObjectHideFlags: 0
@@ -439,6 +539,7 @@ GameObject:
   - component: {fileID: 199920829}
   - component: {fileID: 199920828}
   - component: {fileID: 199920827}
+  - component: {fileID: 199920830}
   m_Layer: 5
   m_Name: UI
   m_TagString: Untagged
@@ -531,6 +632,22 @@ Canvas:
   m_SortingLayerID: -1695470153
   m_SortingOrder: 2
   m_TargetDisplay: 0
+--- !u!114 &199920830
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 199920825}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 54ffa9eb536098348b7da7cd87059662, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  healthSlider: {fileID: 1492046618}
+  manaSlider: {fileID: 365036131}
+  staminaSlider: {fileID: 1499087}
+  transitionSpeed: 5
 --- !u!1 &234329973
 GameObject:
   m_ObjectHideFlags: 0
