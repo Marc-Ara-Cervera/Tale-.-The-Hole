@@ -4,6 +4,10 @@ using UnityEngine.InputSystem;
 
 public class SpellCastController : MonoBehaviour
 {
+    [Header("Configuración de Mano")]
+    [Tooltip("¿Es esta la mano dominante para lanzar hechizos?")]
+    [SerializeField] private bool isDominantHand = false;
+
     [Header("Referencias")]
     [SerializeField] private XRBaseController controller;
 
@@ -11,7 +15,7 @@ public class SpellCastController : MonoBehaviour
     [SerializeField] private InputActionReference castSpellAction;
 
     [Header("Debug")]
-    [SerializeField] private bool showDebugMessages = false;
+    [SerializeField] private bool showDebugMessages = true;
 
     // Cache de bastones
     private MagicStaff[] cachedStaffs;
@@ -22,16 +26,24 @@ public class SpellCastController : MonoBehaviour
     private bool isCharging = false;
     private float chargeStartTime = 0f;
 
+    // Propiedad pública para acceder desde otros scripts
+    public bool IsDominantHand => isDominantHand;
+    public XRBaseController Controller => controller;
+
     private void Awake()
     {
-        // Obtener XRBaseController si no está asignado
         if (controller == null)
         {
             controller = GetComponent<XRBaseController>();
             if (controller == null)
             {
-                Debug.LogError("No se encontró un XRBaseController en el GameObject. Por favor, asigne uno manualmente.");
+                Debug.LogError("No se encontró un XRBaseController en el GameObject.");
             }
+        }
+
+        if (showDebugMessages)
+        {
+            Debug.Log($"Controlador {controller.name} inicializado. ¿Es dominante? {isDominantHand}");
         }
     }
 
@@ -41,13 +53,17 @@ public class SpellCastController : MonoBehaviour
         {
             castSpellAction.action.Enable();
 
-            // Suscribirse tanto al presionar como al soltar
-            castSpellAction.action.started += OnSpellChargeStarted;
-            castSpellAction.action.canceled += OnSpellChargeEnded;
-        }
-        else
-        {
-            Debug.LogWarning("No se ha asignado una acción de input para lanzar hechizos.");
+            if (isDominantHand)
+            {
+                // Solo registramos los eventos de input en la mano dominante
+                castSpellAction.action.started += OnSpellChargeStarted;
+                castSpellAction.action.canceled += OnSpellChargeEnded;
+
+                if (showDebugMessages)
+                {
+                    Debug.Log($"Controlador dominante {controller.name} suscrito a eventos de hechizos");
+                }
+            }
         }
     }
 
@@ -57,16 +73,15 @@ public class SpellCastController : MonoBehaviour
         {
             castSpellAction.action.Disable();
 
-            // Desuscribirse de ambos eventos
-            castSpellAction.action.started -= OnSpellChargeStarted;
-            castSpellAction.action.canceled -= OnSpellChargeEnded;
+            if (isDominantHand)
+            {
+                castSpellAction.action.started -= OnSpellChargeStarted;
+                castSpellAction.action.canceled -= OnSpellChargeEnded;
+            }
         }
 
-        // Asegurarse de cancelar cualquier carga en progreso
-        if (isCharging)
-        {
-            CancelSpellCharge();
-        }
+        // Asegurarse de limpiar el estado al desactivar
+        ResetChargeState();
     }
 
     /// <summary>
@@ -74,17 +89,41 @@ public class SpellCastController : MonoBehaviour
     /// </summary>
     private void OnSpellChargeStarted(InputAction.CallbackContext context)
     {
+        if (!isDominantHand)
+            return;
+
         if (showDebugMessages)
         {
-            Debug.Log($"Comenzando carga de hechizo en controlador: {controller.name}");
+            Debug.Log($"[{Time.frameCount}] Comenzando carga de hechizo con controlador dominante: {controller.name}");
         }
 
-        // Iniciar la carga
+        // Verificar si estamos sosteniendo algún bastón antes de intentar cargar
+        UpdateStaffsCache();
+        bool holdingAnyStaff = false;
+
+        foreach (MagicStaff staff in cachedStaffs)
+        {
+            if (staff != null && staff.IsHeldByDominantHand(controller))
+            {
+                holdingAnyStaff = true;
+                break;
+            }
+        }
+
+        if (!holdingAnyStaff)
+        {
+            if (showDebugMessages)
+            {
+                Debug.Log($"[{Time.frameCount}] No se encontró ningún bastón sostenido por la mano dominante, ignorando input");
+            }
+            return;
+        }
+
+        // Iniciar carga
         isCharging = true;
         chargeStartTime = Time.time;
 
-        // Notificar a los bastones para iniciar efectos visuales de carga
-        UpdateStaffsCache();
+        // Notificar a todos los bastones - solo responderá el que esté sostenido por esta mano
         foreach (MagicStaff staff in cachedStaffs)
         {
             if (staff != null)
@@ -99,20 +138,20 @@ public class SpellCastController : MonoBehaviour
     /// </summary>
     private void OnSpellChargeEnded(InputAction.CallbackContext context)
     {
-        if (!isCharging)
+        if (!isDominantHand || !isCharging)
             return;
 
         float chargeTime = Time.time - chargeStartTime;
 
         if (showDebugMessages)
         {
-            Debug.Log($"Finalizando carga de hechizo en controlador: {controller.name}. Tiempo de carga: {chargeTime}s");
+            Debug.Log($"[{Time.frameCount}] Finalizando carga de hechizo con controlador dominante: {controller.name}. Tiempo: {chargeTime}s");
         }
 
-        // Resetear estado de carga
+        // Resetear estado interno
         isCharging = false;
 
-        // Intentar lanzar el hechizo (la verificación del tiempo mínimo ocurrirá en el bastón)
+        // Notificar a todos los bastones
         UpdateStaffsCache();
         foreach (MagicStaff staff in cachedStaffs)
         {
@@ -124,22 +163,22 @@ public class SpellCastController : MonoBehaviour
     }
 
     /// <summary>
-    /// Cancela la carga actual si el jugador suelta el bastón mientras carga
+    /// Cancela la carga actual
     /// </summary>
     public void CancelSpellCharge()
     {
-        if (!isCharging)
+        if (!isDominantHand || !isCharging)
             return;
 
         if (showDebugMessages)
         {
-            Debug.Log($"Carga de hechizo cancelada en controlador: {controller.name}");
+            Debug.Log($"[{Time.frameCount}] Carga cancelada con controlador dominante: {controller.name}");
         }
 
-        // Resetear estado de carga
-        isCharging = false;
+        // Resetear estado interno
+        ResetChargeState();
 
-        // Notificar a los bastones para cancelar efectos visuales
+        // Notificar a todos los bastones
         UpdateStaffsCache();
         foreach (MagicStaff staff in cachedStaffs)
         {
@@ -148,6 +187,15 @@ public class SpellCastController : MonoBehaviour
                 staff.CancelCharging(controller);
             }
         }
+    }
+
+    /// <summary>
+    /// Resetea el estado de carga interno
+    /// </summary>
+    public void ResetChargeState()
+    {
+        isCharging = false;
+        chargeStartTime = 0f;
     }
 
     /// <summary>
@@ -164,25 +212,30 @@ public class SpellCastController : MonoBehaviour
 
     private void Update()
     {
-        // Si estamos en modo de carga pero el jugador ha soltado el bastón, cancelar la carga
+        if (!isDominantHand)
+            return;
+
+        // Si estamos cargando, verificar si todavía estamos sosteniendo algún bastón
         if (isCharging)
         {
-            // Verificar si algún bastón está siendo sostenido por este controlador
             bool holdingAnyStaff = false;
 
             UpdateStaffsCache();
             foreach (MagicStaff staff in cachedStaffs)
             {
-                if (staff != null && staff.IsHeldBy(controller))
+                if (staff != null && staff.IsHeldByDominantHand(controller))
                 {
                     holdingAnyStaff = true;
                     break;
                 }
             }
 
-            // Si no está sosteniendo ningún bastón, cancelar la carga
             if (!holdingAnyStaff)
             {
+                if (showDebugMessages)
+                {
+                    Debug.Log($"[{Time.frameCount}] Cancelando carga porque ya no sostenemos ningún bastón");
+                }
                 CancelSpellCharge();
             }
         }

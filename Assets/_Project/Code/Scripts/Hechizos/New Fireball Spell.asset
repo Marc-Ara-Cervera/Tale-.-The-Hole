@@ -16,13 +16,26 @@ MonoBehaviour:
   icon: {fileID: 0}
   description: 
   manaCost: 30
-  cooldownTime: 5
-  minChargeTime: 3
+  cooldownTime: 6
+  minChargeTime: 5
   spellPrefab: {fileID: 4077939970654754643, guid: 72968b43bc9bcf847aca422c3c9c3f82,
     type: 3}
   castSound: {fileID: 0}
   chargingEffectPrefab: {fileID: 0}
   cancelEffectPrefab: {fileID: 0}
+  magicCircles:
+  - circlePrefab: {fileID: 4738490733279088775, guid: 90e8cdf84b6ae2643b819f6ce2ce073f,
+      type: 3}
+    positionOffset: {x: 0, y: -0.2, z: 0}
+    rotationOffset: {x: 0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    appearDelay: 0
+    mainColor: {r: 0.754717, g: 0.20117092, b: 0.10323961, a: 1}
+    emissionColor: {r: 0.75294125, g: 0.20000002, b: 0.10196079, a: 1}
+    emissionIntensity: 1.5
+    minRotationSpeed: 30
+    maxRotationSpeed: 180
+    counterClockwise: 0
   baseDamage: 25
   projectileSpeed: 10
   projectileLifetime: 8

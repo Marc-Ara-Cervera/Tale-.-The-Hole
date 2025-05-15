@@ -1,52 +1,57 @@
 using UnityEngine;
 using UnityEngine.XR.Interaction.Toolkit;
 using System;
+using System.Collections.Generic;
+using static SpellBase;
+using System.Collections;
 
-/// <summary>
-/// Script principal para el bastón mágico en VR.
-/// Gestiona la interacción con los controladores VR y el lanzamiento del hechizo equipado.
-/// </summary>
 public class MagicStaff : MonoBehaviour
 {
     #region Variables y Referencias
 
     [Header("Configuración del Bastón")]
-    [Tooltip("Punto desde donde se generará el hechizo")]
     [SerializeField] private Transform spellSpawnPoint;
-
-    [Tooltip("Efecto visual al lanzar un hechizo")]
     [SerializeField] private ParticleSystem castingVFX;
 
-    [Tooltip("Efecto de sonido al lanzar un hechizo")]
-    [SerializeField] private AudioSource castingAudioSource;
-
     [Header("Hechizo")]
-    [Tooltip("Hechizo equipado en el bastón")]
     [SerializeField] private SpellBase equippedSpell;
 
     [Header("Sistema de Carga")]
-    [Tooltip("Efecto visual durante la carga del hechizo")]
     [SerializeField] private ParticleSystem chargingVFX;
-
-    [Tooltip("Efecto visual cuando se cancela un hechizo")]
     [SerializeField] private ParticleSystem cancelVFX;
+
+    [Header("Audio")]
+    [SerializeField] private AudioController audioController;
+    [SerializeField] private string chargingSoundId = "staff_charging";
+    [SerializeField] private string castSoundId = "staff_cast";
+    [SerializeField] private string cancelSoundId = "staff_cancel";
 
     // Referencias a componentes
     private XRGrabInteractable grabInteractable;
-    private XRBaseController currentController;
+
+    // Lista de todos los controladores que actualmente están agarrando este bastón
+    private List<XRBaseController> heldByControllers = new List<XRBaseController>();
 
     // Referencia a las estadísticas del jugador
     private PlayerStatsManager playerStats;
 
     // Estado de carga
     private bool isCharging = false;
+    private XRBaseController chargingController = null;
+    private float chargeStartTime; // Tiempo en que comenzó la carga
+    private bool chargeComplete; // Indica si la carga ha completado el 100%
+    private float lastProgress = -1f; // Para optimización
 
-    // Referencias a efectos activos
-    private GameObject activeSpellChargingEffect = null;
+    // Para depuración
+    [SerializeField] private bool showDebugMessages = true;
+
+    // Lista para seguir los círculos activos
+    private List<GameObject> activeCircles = new List<GameObject>();
+    private List<VFXCircleEffect> activeEffects = new List<VFXCircleEffect>();
 
     // Eventos
     public event Action<SpellBase> OnSpellCast;
-    public event Action<bool> OnSpellChargeStateChanged; // true = inicio, false = fin
+    public event Action<bool> OnSpellChargeStateChanged;
 
     #endregion
 
@@ -54,17 +59,14 @@ public class MagicStaff : MonoBehaviour
 
     private void Awake()
     {
-        // Obtener referencias a componentes
         grabInteractable = GetComponent<XRGrabInteractable>();
 
         if (spellSpawnPoint == null)
         {
-            // Si no se asignó un punto de generación, usar la posición del bastón
             spellSpawnPoint = transform;
             Debug.LogWarning("No se asignó un punto de generación de hechizos. Usando la posición del bastón.");
         }
 
-        // Verificar que tengamos los componentes necesarios
         if (grabInteractable == null)
         {
             Debug.LogError("Missing XRGrabInteractable component on magic staff!");
@@ -74,7 +76,6 @@ public class MagicStaff : MonoBehaviour
 
     private void OnEnable()
     {
-        // Suscribir a eventos de interacción
         if (grabInteractable != null)
         {
             grabInteractable.selectEntered.AddListener(OnGrabbed);
@@ -84,21 +85,18 @@ public class MagicStaff : MonoBehaviour
 
     private void OnDisable()
     {
-        // Cancelar suscripciones a eventos
         if (grabInteractable != null)
         {
             grabInteractable.selectEntered.RemoveListener(OnGrabbed);
             grabInteractable.selectExited.RemoveListener(OnReleased);
         }
 
-        // Asegurarse de detener cualquier efecto si se desactiva el objeto
+        // Limpiar estado al desactivar
+        isCharging = false;
+        chargingController = null;
+        heldByControllers.Clear();
         StopAllParticleEffects();
-
-        // Limpiar referencias a efectos
-        activeSpellChargingEffect = null;
-
-        // Asegurarse de detener cualquier efecto si se desactiva el objeto
-        StopAllParticleEffects();
+        ClearAllCircles();
     }
 
     #endregion
@@ -110,15 +108,32 @@ public class MagicStaff : MonoBehaviour
     /// </summary>
     public void OnGrabbed(SelectEnterEventArgs args)
     {
-        // Verificar si el interactor es un controlador XR
-        XRBaseController controller = args.interactorObject.transform.GetComponent<XRBaseController>();
-        if (controller != null)
-        {
-            // Registrar qué controlador tiene el bastón
-            currentController = controller;
+        XRBaseController newController = args.interactorObject.transform.GetComponent<XRBaseController>();
+        if (newController == null)
+            return;
 
-            // Obtener las estadísticas del jugador (necesario para verificar mana)
-            playerStats = currentController.transform.root.GetComponent<PlayerStatsManager>();
+        if (showDebugMessages)
+        {
+            Debug.Log($"[{Time.frameCount}] Bastón agarrado por: {newController.name}");
+        }
+
+        // Si este controlador ya estaba en la lista, evitar duplicados
+        if (heldByControllers.Contains(newController))
+            return;
+
+        // Añadir este controlador a la lista de controladores que sostienen el bastón
+        heldByControllers.Add(newController);
+
+        // Verificar si es un controlador dominante para asignar playerStats
+        SpellCastController spellController = newController.GetComponent<SpellCastController>();
+        if (spellController != null && spellController.IsDominantHand)
+        {
+            playerStats = newController.transform.root.GetComponent<PlayerStatsManager>();
+
+            if (showDebugMessages)
+            {
+                Debug.Log($"[{Time.frameCount}] Controlador dominante {newController.name} registrado, playerStats asignado");
+            }
         }
     }
 
@@ -127,14 +142,55 @@ public class MagicStaff : MonoBehaviour
     /// </summary>
     public void OnReleased(SelectExitEventArgs args)
     {
-        // Si estábamos cargando, cancelar la carga
-        if (isCharging)
+        XRBaseController releasedController = args.interactorObject.transform.GetComponent<XRBaseController>();
+        if (releasedController == null)
+            return;
+
+        if (showDebugMessages)
         {
-            CancelCharging(currentController);
+            Debug.Log($"[{Time.frameCount}] Bastón soltado por: {releasedController.name}");
         }
 
-        // Eliminar la referencia al controlador
-        currentController = null;
+        // Eliminar este controlador de la lista
+        heldByControllers.Remove(releasedController);
+
+        // Si estábamos cargando con este controlador, cancelar la carga
+        if (isCharging && releasedController == chargingController)
+        {
+            if (showDebugMessages)
+            {
+                Debug.Log($"[{Time.frameCount}] Cancelando carga porque el controlador que estaba cargando soltó el bastón");
+            }
+            CancelCharging(releasedController);
+        }
+
+        // Si ya no queda ningún controlador sosteniendo el bastón, reiniciar todo
+        if (heldByControllers.Count == 0)
+        {
+            playerStats = null;
+            if (showDebugMessages)
+            {
+                Debug.Log($"[{Time.frameCount}] Ningún controlador sostiene el bastón, reiniciando estado");
+            }
+        }
+        else
+        {
+            // Comprobar si queda algún controlador dominante sosteniendo el bastón
+            foreach (XRBaseController controller in heldByControllers)
+            {
+                SpellCastController spellController = controller.GetComponent<SpellCastController>();
+                if (spellController != null && spellController.IsDominantHand)
+                {
+                    playerStats = controller.transform.root.GetComponent<PlayerStatsManager>();
+
+                    if (showDebugMessages)
+                    {
+                        Debug.Log($"[{Time.frameCount}] Todavía hay un controlador dominante sosteniendo el bastón: {controller.name}");
+                    }
+                    break;
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -142,7 +198,19 @@ public class MagicStaff : MonoBehaviour
     /// </summary>
     public bool IsHeldBy(XRBaseController controller)
     {
-        return currentController == controller;
+        return heldByControllers.Contains(controller);
+    }
+
+    /// <summary>
+    /// Verifica si este bastón está siendo sostenido por un controlador dominante
+    /// </summary>
+    public bool IsHeldByDominantHand(XRBaseController controller)
+    {
+        if (!heldByControllers.Contains(controller))
+            return false;
+
+        SpellCastController spellController = controller.GetComponent<SpellCastController>();
+        return spellController != null && spellController.IsDominantHand;
     }
 
     #endregion
@@ -154,37 +222,67 @@ public class MagicStaff : MonoBehaviour
     /// </summary>
     public void StartCharging(XRBaseController requestingController)
     {
-        // Verificar si este bastón está siendo sostenido por el controlador que solicita cargar
-        if (currentController != requestingController)
+        // Verificación rigurosa: solo el controlador dominante que está sosteniendo el bastón puede cargar
+        if (!IsHeldByDominantHand(requestingController))
         {
+            if (showDebugMessages)
+            {
+                Debug.Log($"[{Time.frameCount}] Ignorando StartCharging de {requestingController.name} - No es dominante o no sostiene el bastón");
+            }
             return;
         }
 
-        // Verificar si hay un hechizo equipado
+        // Verificaciones adicionales
         if (equippedSpell == null)
         {
             PlayFailedCastFeedback();
             return;
         }
 
-        // Verificar si tenemos suficiente mana
         if (playerStats == null || !playerStats.Mana.CanCastSpell(equippedSpell.ManaCost))
         {
             PlayInsufficientManaFeedback();
             return;
         }
 
+        // Si ya estamos cargando con otro controlador, cancelar esa carga primero
+        if (isCharging && chargingController != null && chargingController != requestingController)
+        {
+            CancelCharging(chargingController);
+        }
+
+        // Limpiar círculos anteriores por si acaso
+        ClearAllCircles();
+
         // Activar estado de carga
         isCharging = true;
+        chargingController = requestingController;
+        chargeStartTime = Time.time; // Registrar tiempo de inicio
+        chargeComplete = false; // Reiniciar estado de carga completa
+        lastProgress = -1f; // Reiniciar progreso anterior
 
-        // Efectos visuales de carga (del bastón)
-        PlayChargingEffects(true);
-
-        // Activar efectos específicos del hechizo si existen
-        if (equippedSpell != null && equippedSpell.HasCustomChargingEffect)
+        if (showDebugMessages)
         {
-            activeSpellChargingEffect = equippedSpell.CreateChargingEffect(spellSpawnPoint);
+            Debug.Log($"[{Time.frameCount}] Iniciando carga de hechizo con controlador: {requestingController.name}");
         }
+
+        // Verificar si el hechizo tiene configuraciones de círculos
+        if (equippedSpell != null && equippedSpell.HasMagicCircles())
+        {
+            MagicCircleConfig[] circleConfigs = equippedSpell.GetMagicCircles();
+
+            // Crear cada círculo configurado
+            foreach (MagicCircleConfig config in circleConfigs)
+            {
+                if (config.circlePrefab != null)
+                {
+                    StartCoroutine(CreateDelayedCircle(config));
+                }
+            }
+        }
+
+        // Efectos visuales de carga
+        PlayChargingEffects(true);
 
         // Notificar cambio de estado
         OnSpellChargeStateChanged?.Invoke(true);
@@ -195,47 +293,57 @@ public class MagicStaff : MonoBehaviour
     /// </summary>
     public void FinishCharging(XRBaseController requestingController, float chargeTime)
     {
-        // Verificar si este bastón está siendo sostenido por el controlador que solicita lanzar
-        if (currentController != requestingController)
+        // Verificación rigurosa: solo el controlador que inició la carga puede finalizarla
+        if (chargingController != requestingController)
         {
+            if (showDebugMessages)
+            {
+                Debug.Log($"[{Time.frameCount}] Ignorando FinishCharging de {requestingController.name} - No es el controlador que inició la carga");
+            }
+            return;
+        }
+
+        // Verificación adicional: asegurarse de que seguimos en estado de carga
+        if (!isCharging)
+        {
+            if (showDebugMessages)
+            {
+                Debug.Log($"[{Time.frameCount}] Ignorando FinishCharging porque no estamos en estado de carga");
+            }
             return;
         }
 
         // Desactivar estado de carga
         isCharging = false;
 
-        // Detener efectos visuales de carga (del bastón)
+        // Detener efectos visuales de carga
         PlayChargingEffects(false);
-
-        // Detener efectos específicos del hechizo
-        if (equippedSpell != null)
-        {
-            equippedSpell.StopChargingEffect();
-            activeSpellChargingEffect = null;
-        }
 
         // Notificar cambio de estado
         OnSpellChargeStateChanged?.Invoke(false);
+
+        if (showDebugMessages)
+        {
+            Debug.Log($"[{Time.frameCount}] Finalizando carga de hechizo con tiempo: {chargeTime}s");
+        }
 
         // Verificar si hay un hechizo equipado
         if (equippedSpell == null)
         {
             PlayFailedCastFeedback();
+            ClearAllCircles();
             return;
         }
 
-        // Verificar tiempo mínimo de carga del hechizo
+        // Verificar tiempo mínimo de carga del hechizo equipado
         if (chargeTime < equippedSpell.MinChargeTime)
         {
-            PlayCancelEffects();
-
-            // Mostrar efecto de cancelación específico del hechizo
-            if (equippedSpell.HasCustomCancelEffect)
+            if (showDebugMessages)
             {
-                equippedSpell.CreateCancelEffect(spellSpawnPoint.position, spellSpawnPoint.rotation);
+                Debug.Log($"[{Time.frameCount}] Tiempo de carga insuficiente. Requerido: {equippedSpell.MinChargeTime}s, Actual: {chargeTime}s");
             }
-
-            Debug.Log($"Tiempo de carga insuficiente. Requerido: {equippedSpell.MinChargeTime}s, Actual: {chargeTime}s");
+            PlayCancelEffects();
+            ClearAllCircles();
             return;
         }
 
@@ -243,22 +351,30 @@ public class MagicStaff : MonoBehaviour
         if (playerStats == null || !playerStats.Mana.CanCastSpell(equippedSpell.ManaCost))
         {
             PlayInsufficientManaFeedback();
+            ClearAllCircles();
             return;
         }
 
         // Verificar si el hechizo está listo (cooldown)
-        Debug.Log($"Checking if spell is ready. Current spell: {equippedSpell.SpellName}");
-
         if (!equippedSpell.IsReady())
         {
-            Debug.Log($"Spell {equippedSpell.SpellName} is not ready! Cooldown remaining: {equippedSpell.RemainingCooldown}");
+            if (showDebugMessages)
+            {
+                Debug.Log($"[{Time.frameCount}] Hechizo en cooldown");
+            }
             PlayCooldownFeedback();
+            ClearAllCircles();
             return;
         }
 
-        Debug.Log($"Spell {equippedSpell.SpellName} is ready to cast!");
+        // Iniciar animación de desaparición de círculos antes de lanzar
+        StartCoroutine(FadeOutCircles());
 
         // Lanzar el hechizo
+        if (showDebugMessages)
+        {
+            Debug.Log($"[{Time.frameCount}] ¡Lanzando hechizo!");
+        }
         equippedSpell.Cast(spellSpawnPoint, playerStats);
 
         // Consumir mana
@@ -267,72 +383,132 @@ public class MagicStaff : MonoBehaviour
         // Efectos visuales/sonoros de lanzamiento
         PlayCastingEffects();
 
+        // Reiniciar estado
+        chargingController = null;
+        chargeComplete = false;
+
         // Notificar a los suscriptores
         OnSpellCast?.Invoke(equippedSpell);
     }
 
     /// <summary>
-    /// Cancela la carga actual (cuando el jugador suelta el bastón durante la carga)
+    /// Cancela la carga actual
     /// </summary>
     public void CancelCharging(XRBaseController requestingController)
     {
-        // Verificar si este bastón está siendo sostenido por el controlador que solicita cancelar
-        if (currentController != requestingController)
+        // Solo permitir cancelar al controlador que inició la carga o a un controlador dominante
+        if (chargingController != requestingController && !IsHeldByDominantHand(requestingController))
         {
+            if (showDebugMessages)
+            {
+                Debug.Log($"[{Time.frameCount}] Ignorando CancelCharging de {requestingController.name} - No es el controlador adecuado");
+            }
             return;
         }
 
         // Solo procesar si estábamos cargando
         if (!isCharging)
         {
+            if (showDebugMessages)
+            {
+                Debug.Log($"[{Time.frameCount}] Ignorando CancelCharging porque no estamos en estado de carga");
+            }
             return;
+        }
+
+        if (showDebugMessages)
+        {
+            Debug.Log($"[{Time.frameCount}] Cancelando carga de hechizo");
         }
 
         // Desactivar estado de carga
         isCharging = false;
 
-        // Detener efectos visuales de carga (del bastón)
+        // Detener efectos visuales de carga y sonido
         PlayChargingEffects(false);
 
-        // Detener efectos específicos del hechizo
-        if (equippedSpell != null)
-        {
-            equippedSpell.StopChargingEffect();
-            activeSpellChargingEffect = null;
-
-            // Mostrar efecto de cancelación específico del hechizo
-            if (equippedSpell.HasCustomCancelEffect)
-            {
-                equippedSpell.CreateCancelEffect(spellSpawnPoint.position, spellSpawnPoint.rotation);
-            }
-        }
-
-        // Mostrar efectos de cancelación (del bastón)
+        // Mostrar efectos de cancelación
         PlayCancelEffects();
+
+        // Iniciar desaparición gradual de círculos
+        StartCoroutine(FadeOutCircles());
+
+        // Reiniciar estado
+        chargingController = null;
+        chargeComplete = false;
 
         // Notificar cambio de estado
         OnSpellChargeStateChanged?.Invoke(false);
+    }
+
+    private void Update()
+    {
+        // Solo procesar si estamos en estado de carga
+        if (!isCharging || equippedSpell == null) return;
+
+        // Calcular progreso de carga
+        float chargeTime = Time.time - chargeStartTime;
+        float progress = Mathf.Clamp01(chargeTime / equippedSpell.MinChargeTime);
+
+        // Solo actualizar si hay un cambio significativo (optimización)
+        if (Mathf.Abs(lastProgress - progress) > 0.01f)
+        {
+            lastProgress = progress;
+
+            // Actualizar círculos mágicos
+            foreach (VFXCircleEffect effect in activeEffects)
+            {
+                if (effect == null) continue;
+                effect.UpdateProgress(progress);
+            }
+
+            // Completar la carga cuando llegue al 100%
+            if (progress >= 1.0f && !chargeComplete)
+            {
+                chargeComplete = true;
+
+                // Opcional: Feedback de vibración
+                // (código para vibración si existe)
+            }
+        }
     }
 
     #endregion
 
     #region Efectos Visuales y Sonoros
 
+    private IEnumerator FadeOutCircles()
+    {
+        // Iniciar animación de desaparición en cada círculo
+        foreach (VFXCircleEffect effect in activeEffects)
+        {
+            if (effect != null)
+            {
+                effect.Hide();
+            }
+        }
+
+        // Esperar un tiempo para la animación
+        yield return new WaitForSeconds(0.5f);
+
+        // Limpiar
+        ClearAllCircles();
+    }
+
     /// <summary>
     /// Activa efectos visuales y sonoros al lanzar un hechizo
     /// </summary>
     private void PlayCastingEffects()
     {
-        // Activar efecto de partículas
         if (castingVFX != null && !castingVFX.isPlaying)
         {
             castingVFX.Play();
         }
 
-        // Activar efecto de sonido
-        if (castingAudioSource != null)
+        // Usar el nuevo sistema de audio
+        if (audioController != null)
         {
-            castingAudioSource.Play();
+            audioController.Play(castSoundId);
         }
     }
 
@@ -341,18 +517,102 @@ public class MagicStaff : MonoBehaviour
     /// </summary>
     private void PlayChargingEffects(bool activate)
     {
-        // Efectos de partículas
         if (chargingVFX != null)
         {
             if (activate && !chargingVFX.isPlaying)
             {
                 chargingVFX.Play();
+
+                // Utiliza la configuración de fade específica del sonido
+                if (audioController != null)
+                {
+                    // El método Play ahora usará automáticamente el fade configurado
+                    audioController.Play(chargingSoundId);
+                }
             }
             else if (!activate && chargingVFX.isPlaying)
             {
                 chargingVFX.Stop();
+
+                // Al detener, también usará la configuración de fade específica
+                if (audioController != null)
+                {
+                    audioController.StopSound(chargingSoundId, true);
+                }
             }
         }
+    }
+
+    private void ClearAllCircles()
+    {
+        foreach (GameObject circle in activeCircles)
+        {
+            if (circle != null)
+            {
+                Destroy(circle);
+            }
+        }
+
+        activeCircles.Clear();
+        activeEffects.Clear();
+    }
+
+    private IEnumerator CreateDelayedCircle(MagicCircleConfig config)
+    {
+        // Esperar el retraso especificado
+        if (config.appearDelay > 0)
+        {
+            yield return new WaitForSeconds(config.appearDelay);
+        }
+
+        // Si ya no estamos cargando, salir
+        if (!isCharging)
+        {
+            yield break;
+        }
+
+        // Calcular posición y rotación
+        Vector3 circlePosition = spellSpawnPoint.position + spellSpawnPoint.TransformDirection(config.positionOffset);
+        Quaternion circleRotation = spellSpawnPoint.rotation * Quaternion.Euler(config.rotationOffset);
+
+        // Crear el círculo
+        GameObject circle = Instantiate(config.circlePrefab, circlePosition, circleRotation);
+
+        // Hacer hijo del punto de spawn para que se mueva con el bastón
+        circle.transform.SetParent(spellSpawnPoint);
+
+        // Configurar escala inicial a cero para evitar parpadeos
+        circle.transform.localScale = Vector3.zero;
+
+        // Obtener el componente de efecto del círculo
+        VFXCircleEffect circleEffect = circle.GetComponent<VFXCircleEffect>();
+        if (circleEffect == null)
+        {
+            // Si no tiene el componente, añadirlo
+            circleEffect = circle.AddComponent<VFXCircleEffect>();
+        }
+
+        // Asegurarnos que no está en modo decorativo para la carga
+        circleEffect.isDecorative = false;
+
+        // IMPORTANTE: Configurar rotación antes de iniciar los efectos
+        if (config.minRotationSpeed > 0)
+            circleEffect.SetMinRotationSpeed(config.minRotationSpeed);
+
+        if (config.maxRotationSpeed > 0)
+            circleEffect.SetMaxRotationSpeed(config.maxRotationSpeed);
+
+        if (config.counterClockwise)
+            circleEffect.SetRotationDirection(true);
+
+        // Iniciar el efecto de carga
+        circleEffect.StartChargeEffect();
+
+        // Registrar para actualizaciones y limpieza
+        activeCircles.Add(circle);
+        activeEffects.Add(circleEffect);
+
+        Debug.Log($"Círculo mágico creado: {circle.name}");
     }
 
     /// <summary>
@@ -360,10 +620,15 @@ public class MagicStaff : MonoBehaviour
     /// </summary>
     private void PlayCancelEffects()
     {
-        // Efectos de partículas
         if (cancelVFX != null)
         {
             cancelVFX.Play();
+        }
+
+        // Usar el nuevo sistema de audio
+        if (audioController != null)
+        {
+            audioController.Play(cancelSoundId);
         }
     }
 
@@ -372,9 +637,7 @@ public class MagicStaff : MonoBehaviour
     /// </summary>
     private void PlayInsufficientManaFeedback()
     {
-        // Efecto visual/auditivo de mana insuficiente
         Debug.Log("¡Mana insuficiente!");
-        // Aquí podrías añadir un efecto de partículas específico para mana insuficiente
     }
 
     /// <summary>
@@ -382,9 +645,7 @@ public class MagicStaff : MonoBehaviour
     /// </summary>
     private void PlayCooldownFeedback()
     {
-        // Efecto visual/auditivo de hechizo en cooldown
         Debug.Log("¡Hechizo en cooldown!");
-        // Aquí podrías añadir un efecto de partículas específico para cooldown
     }
 
     /// <summary>
@@ -392,9 +653,7 @@ public class MagicStaff : MonoBehaviour
     /// </summary>
     private void PlayFailedCastFeedback()
     {
-        // Efecto visual/auditivo de lanzamiento fallido
         Debug.Log("¡No hay hechizo equipado!");
-        // Aquí podrías añadir un efecto de partículas específico para lanzamiento fallido
     }
 
     /// <summary>
@@ -411,32 +670,46 @@ public class MagicStaff : MonoBehaviour
         if (cancelVFX != null && cancelVFX.isPlaying)
             cancelVFX.Stop();
 
-        // Detener efectos del hechizo activo
-        if (equippedSpell != null)
+        // Detener todos los sonidos
+        if (audioController != null)
         {
-            equippedSpell.StopChargingEffect();
-            activeSpellChargingEffect = null;
+            audioController.StopAllSounds(false);
         }
     }
 
     #endregion
 
-    #region Preparación para Multiplayer (Futuro)
+    #region Depuración
 
-    // Estos métodos se implementarán cuando se añada Photon PUN 2
+    // Método para ayudar a depurar el estado actual
+    private void OnGUI()
+    {
+        if (!showDebugMessages) return;
 
-    // private void TransferOwnership()
-    // {
-    //     // Cuando se implemente Photon, aquí transferiremos la propiedad al jugador que agarre el bastón
-    //     // photonView.TransferOwnership(PhotonNetwork.LocalPlayer);
-    // }
+        // Solo para depuración en editor
+#if UNITY_EDITOR
+        int y = 10;
+        GUI.Label(new Rect(10, y, 500, 20), $"MagicStaff Status: isCharging={isCharging}");
+        y += 20;
 
-    // private bool IsOwner()
-    // {
-    //     // Verificar si el jugador local es el dueño de este bastón
-    //     // return photonView.IsMine;
-    //     return true; // Por ahora, siempre es true en singleplayer
-    // }
+        if (chargingController != null)
+        {
+            GUI.Label(new Rect(10, y, 500, 20), $"Charging Controller: {chargingController.name}");
+            y += 20;
+        }
+
+        GUI.Label(new Rect(10, y, 500, 20), $"Controllers holding staff: {heldByControllers.Count}");
+        y += 20;
+
+        foreach (XRBaseController controller in heldByControllers)
+        {
+            SpellCastController spellController = controller.GetComponent<SpellCastController>();
+            bool isDominant = spellController != null && spellController.IsDominantHand;
+            GUI.Label(new Rect(10, y, 500, 20), $"- {controller.name} (Dominant: {isDominant})");
+            y += 20;
+        }
+#endif
+    }
 
     #endregion
 }

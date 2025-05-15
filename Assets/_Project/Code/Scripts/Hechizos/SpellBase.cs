@@ -43,6 +43,49 @@ public abstract class SpellBase : ScriptableObject
     [SerializeField] protected GameObject cancelEffectPrefab;
     private GameObject activeChargingEffect = null;
 
+    [System.Serializable]
+    public class MagicCircleConfig
+    {
+        [Tooltip("Prefab del círculo mágico")]
+        public GameObject circlePrefab;
+
+        [Tooltip("Desplazamiento de posición relativo al punto de spawn")]
+        public Vector3 positionOffset = Vector3.zero;
+
+        [Tooltip("Rotación adicional aplicada al círculo")]
+        public Vector3 rotationOffset = Vector3.zero;
+
+        [Tooltip("Escala base del círculo")]
+        public Vector3 scale = Vector3.one;
+
+        [Tooltip("Retraso antes de que aparezca este círculo (segundos)")]
+        [Range(0f, 2f)] public float appearDelay = 0f;
+
+        [Header("Colores")]
+        [Tooltip("Color principal del círculo")]
+        public Color mainColor = Color.white;
+
+        [Tooltip("Color de emisión (brillo)")]
+        public Color emissionColor = Color.white;
+
+        [Tooltip("Intensidad de la emisión")]
+        [Range(0.1f, 5f)] public float emissionIntensity = 1.5f;
+
+        [Header("Personalización de Rotación")]
+        [Tooltip("Velocidad de rotación mínima")]
+        [Range(10f, 90f)] public float minRotationSpeed = 30f;
+
+        [Tooltip("Velocidad de rotación máxima")]
+        [Range(90f, 360f)] public float maxRotationSpeed = 180f;
+
+        [Tooltip("Girar en sentido contrario a las agujas del reloj")]
+        public bool counterClockwise = false;
+    }
+
+    [Header("Círculos Mágicos")]
+    [Tooltip("Configuraciones de círculos mágicos para este hechizo")]
+    [SerializeField] private MagicCircleConfig[] magicCircles = new MagicCircleConfig[0];
+
     // Tiempo del último lanzamiento (para gestionar cooldown)
     [System.NonSerialized] private float lastCastTime = -999f; // Inicializado a un valor negativo para permitir lanzar inmediatamente
 
@@ -96,6 +139,22 @@ public abstract class SpellBase : ScriptableObject
         Debug.Log($"Spell: {name} | lastCastTime: {lastCastTime} | Time.time: {Time.time} | cooldownTime: {cooldownTime} | Remaining: {remainingTime} | IsReady: {ready}");
 
         return ready;
+    }
+
+    /// <summary>
+    /// Método para saber si este hechizo usa círculos mágicos
+    /// </summary>
+    public bool HasMagicCircles()
+    {
+        return magicCircles != null && magicCircles.Length > 0;
+    }
+
+    /// <summary>
+    /// Método para obtener las configuraciones de círculos
+    /// </summary>
+    public MagicCircleConfig[] GetMagicCircles()
+    {
+        return magicCircles;
     }
 
     /// <summary>
