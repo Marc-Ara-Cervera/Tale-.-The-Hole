@@ -4860,6 +4860,21 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 2398244969673853010, guid: 90e8cdf84b6ae2643b819f6ce2ce073f,
+        type: 3}
+      propertyPath: axis
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2398244969673853010, guid: 90e8cdf84b6ae2643b819f6ce2ce073f,
+        type: 3}
+      propertyPath: isDecorative
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2398244969673853010, guid: 90e8cdf84b6ae2643b819f6ce2ce073f,
+        type: 3}
+      propertyPath: rotationSpeed
+      value: 30
+      objectReference: {fileID: 0}
     - target: {fileID: 4738490733279088775, guid: 90e8cdf84b6ae2643b819f6ce2ce073f,
         type: 3}
       propertyPath: m_Name

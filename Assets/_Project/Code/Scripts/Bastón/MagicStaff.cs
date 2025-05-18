@@ -559,60 +559,40 @@ public class MagicStaff : MonoBehaviour
 
     private IEnumerator CreateDelayedCircle(MagicCircleConfig config)
     {
-        // Esperar el retraso especificado
-        if (config.appearDelay > 0)
-        {
-            yield return new WaitForSeconds(config.appearDelay);
-        }
-
         // Si ya no estamos cargando, salir
         if (!isCharging)
-        {
             yield break;
-        }
 
-        // Calcular posición y rotación
-        Vector3 circlePosition = spellSpawnPoint.position + spellSpawnPoint.TransformDirection(config.positionOffset);
-        Quaternion circleRotation = spellSpawnPoint.rotation * Quaternion.Euler(config.rotationOffset);
+        // Calcular posición
+        Vector3 position = spellSpawnPoint.position +
+                          spellSpawnPoint.TransformDirection(config.positionOffset);
 
-        // Crear el círculo
-        GameObject circle = Instantiate(config.circlePrefab, circlePosition, circleRotation);
+        // Instanciar círculo
+        GameObject circle = Instantiate(config.circlePrefab,
+                                       position,
+                                       spellSpawnPoint.rotation,
+                                       spellSpawnPoint);
 
-        // Hacer hijo del punto de spawn para que se mueva con el bastón
-        circle.transform.SetParent(spellSpawnPoint);
+        // Obtener componente
+        VFXCircleEffect effect = circle.GetComponent<VFXCircleEffect>();
 
-        // Configurar escala inicial a cero para evitar parpadeos
-        circle.transform.localScale = Vector3.zero;
-
-        // Obtener el componente de efecto del círculo
-        VFXCircleEffect circleEffect = circle.GetComponent<VFXCircleEffect>();
-        if (circleEffect == null)
+        // Si tiene el componente, activar efecto
+        if (effect != null)
         {
-            // Si no tiene el componente, añadirlo
-            circleEffect = circle.AddComponent<VFXCircleEffect>();
+            effect.isDecorative = false;
+
+            // IMPORTANTE: Configurar tiempo total de carga y delay específico
+            effect.InitializeWithDelay(config.appearDelay, equippedSpell.MinChargeTime);
+
+            // Iniciar efecto
+            effect.StartChargeEffect();
+
+            // Registrar para actualizaciones
+            activeEffects.Add(effect);
         }
 
-        // Asegurarnos que no está en modo decorativo para la carga
-        circleEffect.isDecorative = false;
-
-        // IMPORTANTE: Configurar rotación antes de iniciar los efectos
-        if (config.minRotationSpeed > 0)
-            circleEffect.SetMinRotationSpeed(config.minRotationSpeed);
-
-        if (config.maxRotationSpeed > 0)
-            circleEffect.SetMaxRotationSpeed(config.maxRotationSpeed);
-
-        if (config.counterClockwise)
-            circleEffect.SetRotationDirection(true);
-
-        // Iniciar el efecto de carga
-        circleEffect.StartChargeEffect();
-
-        // Registrar para actualizaciones y limpieza
+        // Registrar para limpieza
         activeCircles.Add(circle);
-        activeEffects.Add(circleEffect);
-
-        Debug.Log($"Círculo mágico creado: {circle.name}");
     }
 
     /// <summary>

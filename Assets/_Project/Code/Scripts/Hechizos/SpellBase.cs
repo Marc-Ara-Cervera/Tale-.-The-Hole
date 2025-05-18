@@ -49,37 +49,11 @@ public abstract class SpellBase : ScriptableObject
         [Tooltip("Prefab del círculo mágico")]
         public GameObject circlePrefab;
 
-        [Tooltip("Desplazamiento de posición relativo al punto de spawn")]
+        [Tooltip("Desplazamiento de posición")]
         public Vector3 positionOffset = Vector3.zero;
 
-        [Tooltip("Rotación adicional aplicada al círculo")]
-        public Vector3 rotationOffset = Vector3.zero;
-
-        [Tooltip("Escala base del círculo")]
-        public Vector3 scale = Vector3.one;
-
-        [Tooltip("Retraso antes de que aparezca este círculo (segundos)")]
+        [Tooltip("Retraso de aparición (segundos)")]
         [Range(0f, 2f)] public float appearDelay = 0f;
-
-        [Header("Colores")]
-        [Tooltip("Color principal del círculo")]
-        public Color mainColor = Color.white;
-
-        [Tooltip("Color de emisión (brillo)")]
-        public Color emissionColor = Color.white;
-
-        [Tooltip("Intensidad de la emisión")]
-        [Range(0.1f, 5f)] public float emissionIntensity = 1.5f;
-
-        [Header("Personalización de Rotación")]
-        [Tooltip("Velocidad de rotación mínima")]
-        [Range(10f, 90f)] public float minRotationSpeed = 30f;
-
-        [Tooltip("Velocidad de rotación máxima")]
-        [Range(90f, 360f)] public float maxRotationSpeed = 180f;
-
-        [Tooltip("Girar en sentido contrario a las agujas del reloj")]
-        public bool counterClockwise = false;
     }
 
     [Header("Círculos Mágicos")]

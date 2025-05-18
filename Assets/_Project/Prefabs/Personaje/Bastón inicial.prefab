@@ -477,7 +477,7 @@ MonoBehaviour:
     useFade: 0
     fadeInDuration: 0.5
     fadeOutDuration: 0.5
-  poolSize: 2
+  poolSize: 3
   defaultFadeDuration: 0.5
   persistBetweenScenes: 0
   debug: 0

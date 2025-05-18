@@ -76,7 +76,7 @@ MonoBehaviour:
   m_UseMipMap: 0
   m_VSyncEnabled: 0
   m_Gizmos: 0
-  m_Stats: 0
+  m_Stats: 1
   m_SelectedSizes: 00000000000000000000000000000000000000000000000000000000000000000000000000000000
   m_ZoomArea:
     m_HRangeLocked: 0
@@ -191,23 +191,23 @@ MonoBehaviour:
   m_SceneHierarchy:
     m_TreeViewState:
       scrollPos: {x: 0, y: 0}
-      m_SelectedIDs: 66890100
-      m_LastClickedID: 100710
-      m_ExpandedIDs: fa68fdff9e69fdff0275fdff66affdff0ab0fdff78bbfdff88dafdff2cdbfdff96e6fdff5475fefff875feff5a81feffd2c7feff76c8feffbcd3feff7cdffeff20e0feff82ebfeffa24cffff464dffffb458ffff0e6affffb26affff1676ffff20faffff1efbffffac9e0000309f000052a20000a2b6000026b7000018b9000048ba00001cbc000058bd000094bd0000e8f500006cf6000048f8000074f900003a090100be090100c60c0100e4480100f85b01007c5c0100845f010056720100e275010066890100
+      m_SelectedIDs: faf5ffff
+      m_LastClickedID: -2566
+      m_ExpandedIDs: 1efbffff
       m_RenameOverlay:
         m_UserAcceptedRename: 0
-        m_Name: UI
-        m_OriginalName: UI
+        m_Name: 
+        m_OriginalName: 
         m_EditFieldRect:
           serializedVersion: 2
           x: 0
           y: 0
           width: 0
           height: 0
-        m_UserData: 99976
+        m_UserData: 0
         m_IsWaitingForDelay: 0
         m_IsRenaming: 0
-        m_OriginalEventType: 0
+        m_OriginalEventType: 11
         m_IsRenamingFilename: 0
         m_ClientGUIView: {fileID: 3}
       m_SearchString: 
@@ -335,7 +335,7 @@ MonoBehaviour:
       floating: 0
       collapsed: 0
       displayed: 1
-      snapOffset: {x: 0, y: 0}
+      snapOffset: {x: 0, y: 25}
       snapOffsetDelta: {x: 0, y: 0}
       snapCorner: 0
       id: unity-scene-view-toolbar
@@ -627,9 +627,9 @@ MonoBehaviour:
   m_PlayAudio: 0
   m_AudioPlay: 0
   m_Position:
-    m_Target: {x: -7.6796055, y: 0.6639714, z: 5.695577}
+    m_Target: {x: 2.144717, y: 0.14277309, z: 1.871456}
     speed: 2
-    m_Value: {x: -7.6796055, y: 0.6639714, z: 5.695577}
+    m_Value: {x: 2.144717, y: 0.14277309, z: 1.871456}
   m_RenderMode: 0
   m_CameraMode:
     drawMode: 0
@@ -675,13 +675,13 @@ MonoBehaviour:
     m_GridAxis: 1
     m_gridOpacity: 0.5
   m_Rotation:
-    m_Target: {x: 0, y: 0, z: 0, w: 1}
+    m_Target: {x: -0.09205834, y: -0.90413314, z: 0.2481818, w: -0.33537722}
     speed: 2
-    m_Value: {x: 0, y: 0, z: 0, w: 1}
+    m_Value: {x: -0.09205818, y: -0.90413165, z: 0.24818139, w: -0.33537665}
   m_Size:
-    m_Target: 12.691637
+    m_Target: 2.670406
     speed: 2
-    m_Value: 12.691637
+    m_Value: 2.670406
   m_Ortho:
     m_Target: 0
     speed: 2
@@ -780,7 +780,7 @@ MonoBehaviour:
     m_SkipHidden: 0
     m_SearchArea: 1
     m_Folders:
-    - Assets/_Project/Audio/VFX
+    - Assets/_Project/Prefabs/VFX
     m_Globs: []
     m_OriginalText: 
     m_ImportLogFlags: 0
@@ -788,16 +788,16 @@ MonoBehaviour:
   m_ViewMode: 1
   m_StartGridSize: 64
   m_LastFolders:
-  - Assets/_Project/Audio/VFX
+  - Assets/_Project/Prefabs/VFX
   m_LastFoldersGridSize: -1
   m_LastProjectPath: C:\Proyectos Unity\Tale . The Hole
   m_LockTracker:
     m_IsLocked: 0
   m_FolderTreeState:
-    scrollPos: {x: 0, y: 95}
-    m_SelectedIDs: 308e0100
-    m_LastClickedID: 101936
-    m_ExpandedIDs: 00000000627f0000647f0000667f0000687f00006a7f00006c7f00006e7f0000707f0000727f0000747f0000767f0000787f00007a7f00007c7f00007e7f0000807f0000827f0000847f0000867f0000ea7f0000ec7f0000f07f0000068000002aa9000000ca9a3b
+    scrollPos: {x: 0, y: 412}
+    m_SelectedIDs: 14800000
+    m_LastClickedID: 32788
+    m_ExpandedIDs: 00000000687f00006a7f00006c7f00006e7f0000707f0000727f0000747f0000767f0000787f00007a7f00007c7f00007e7f0000807f0000827f0000847f0000867f0000887f00008a7f00008c7f00008e7f0000907f0000927f0000947f0000967f000000ca9a3b
     m_RenameOverlay:
       m_UserAcceptedRename: 0
       m_Name: 
@@ -825,7 +825,7 @@ MonoBehaviour:
     scrollPos: {x: 0, y: 0}
     m_SelectedIDs: 
     m_LastClickedID: 0
-    m_ExpandedIDs: 00000000627f0000647f0000667f0000687f00006a7f00006c7f00006e7f0000707f0000727f0000747f0000767f0000787f00007a7f00007c7f00007e7f0000807f0000827f0000847f0000867f0000
+    m_ExpandedIDs: 00000000687f00006a7f00006c7f00006e7f0000707f0000727f0000747f0000767f0000787f00007a7f00007c7f00007e7f0000807f0000827f0000847f0000867f0000887f00008a7f00008c7f00008e7f0000907f0000927f0000947f0000967f000000ca9a3b
     m_RenameOverlay:
       m_UserAcceptedRename: 0
       m_Name: 
@@ -850,8 +850,8 @@ MonoBehaviour:
       m_Icon: {fileID: 0}
       m_ResourceFile: 
   m_ListAreaState:
-    m_SelectedInstanceIDs: 66890100
-    m_LastClickedInstanceID: 100710
+    m_SelectedInstanceIDs: faf5ffff
+    m_LastClickedInstanceID: -2566
     m_HadKeyboardFocusLastEvent: 1
     m_ExpandedInstanceIDs: c6230000166700008866000046e2000058020000027b00000e7b000060020000ea8b0000d2c700008602000052020100460201004e0201004202010080020100e6020000223201000a7d010070d10000f4c2000060d9000000000000807600001477000036770000
     m_RenameOverlay:
@@ -953,7 +953,7 @@ MonoBehaviour:
     m_OverlaysVisible: 1
   m_LockTracker:
     m_IsLocked: 0
-  m_LastSelectedObjectID: 100710
+  m_LastSelectedObjectID: -2566
 --- !u!114 &12
 MonoBehaviour:
   m_ObjectHideFlags: 52
@@ -973,8 +973,8 @@ MonoBehaviour:
     y: 0
     width: 516
     height: 939
-  m_MinSize: {x: 276, y: 71}
-  m_MaxSize: {x: 4001, y: 4021}
+  m_MinSize: {x: 275, y: 50}
+  m_MaxSize: {x: 4000, y: 4000}
   m_ActualView: {fileID: 13}
   m_Panes:
   - {fileID: 13}
@@ -1025,7 +1025,7 @@ MonoBehaviour:
     m_ControlHash: -371814159
     m_PrefName: Preview_InspectorPreview
   m_LastInspectedObjectInstanceID: -1
-  m_LastVerticalScrollValue: 425
+  m_LastVerticalScrollValue: 0
   m_GlobalObjectId: 
   m_InspectorMode: 0
   m_LockTracker:

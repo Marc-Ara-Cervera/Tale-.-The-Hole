@@ -177,7 +177,7 @@ GameObject:
   - component: {fileID: 8038202229490223104}
   - component: {fileID: 2398244969673853010}
   m_Layer: 0
-  m_Name: "C\xEDrculo magico"
+  m_Name: "C\xEDrculo magico 1"
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -193,7 +193,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: -0.36, y: 0.13, z: 0.35}
-  m_LocalScale: {x: 0.2, y: 0.2, z: 0.2}
+  m_LocalScale: {x: 0.4, y: 0.4, z: 0.4}
   m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 4053222504280580520}
@@ -215,11 +215,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   isDecorative: 0
   rotationSpeed: 0
-  startChargeSpeed: 10
-  maxChargeSpeed: 180
-  completeSpeed: 5
+  startChargeSpeed: 20
+  maxChargeSpeed: 150
+  completeSpeed: 10
   normalScale: 1
-  completeScale: 1.2
+  completeScale: 1.6
+  appearDuration: 0.5
+  disappearDuration: 0.5
 --- !u!1 &7571369961089686995
 GameObject:
   m_ObjectHideFlags: 0
