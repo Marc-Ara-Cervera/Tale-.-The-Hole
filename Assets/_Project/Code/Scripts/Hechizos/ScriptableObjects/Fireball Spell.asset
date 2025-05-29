@@ -1,0 +1,46 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d3142537cd76acb4da34549afc1d32f0, type: 3}
+  m_Name: Fireball Spell
+  m_EditorClassIdentifier: 
+  spellName: Bola de fuego
+  icon: {fileID: 0}
+  description: 
+  originConfig:
+    originType: 0
+    positionOffset: {x: 0, y: 0, z: 0}
+    rotationOffset: {x: 0, y: 0, z: 0}
+    heightAboveTarget: 3
+    distanceInFrontOfPlayer: 2.5
+    worldFixedPosition: {x: 0, y: 0, z: 0}
+  commandType: 0
+  preparationPrefab: {fileID: 7453050466094432560, guid: ddfe71f7ac3b2884aa1905cb16d9dbfb,
+    type: 3}
+  commandTimeout: 3.2
+  allowInstantFallback: 0
+  aimHoldTime: 1.5
+  aimTolerance: 0.15
+  minimumGestureSpeed: 2.5
+  manaCost: 20
+  cooldownTime: 5
+  minChargeTime: 2
+  spellPrefab: {fileID: 7453050466094432560, guid: 7beb44185ac13f5458de0a21477f2e7e,
+    type: 3}
+  castSound: {fileID: 0}
+  chargingEffectPrefab: {fileID: 0}
+  cancelEffectPrefab: {fileID: 0}
+  magicCircles: []
+  projectileSpeed: 10
+  damage: 25
+  explosionRadius: 3
+  directionalSpeedBonus: 2
+  gestureIntensityDamageMultiplier: 0.2

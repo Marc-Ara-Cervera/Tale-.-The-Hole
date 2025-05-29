@@ -1,15 +1,26 @@
-using UnityEngine;
+Ôªøusing UnityEngine;
 using UnityEngine.XR.Interaction.Toolkit;
 using System;
 using System.Collections.Generic;
 using static SpellBase;
 using System.Collections;
 
+/// <summary>
+/// Estados del sistema de hechizos
+/// </summary>
+public enum SpellState
+{
+    IDLE,           // No hay hechizo activo
+    CHARGING,       // Cargando hechizo (manteniendo gatillo)
+    PREPARED,       // Hechizo listo, esperando comando
+    EXECUTING       // Ejecutando hechizo
+}
+
 public class MagicStaff : MonoBehaviour
 {
     #region Variables y Referencias
 
-    [Header("ConfiguraciÛn del BastÛn")]
+    [Header("Configuraci√≥n del Bast√≥n")]
     [SerializeField] private Transform spellSpawnPoint;
     [SerializeField] private ParticleSystem castingVFX;
 
@@ -26,36 +37,69 @@ public class MagicStaff : MonoBehaviour
     [SerializeField] private string castSoundId = "staff_cast";
     [SerializeField] private string cancelSoundId = "staff_cancel";
 
+    [Header("Sistema de Targeting")]
+    [SerializeField] private LayerMask raycastLayers = -1;
+    [SerializeField] private float maxRaycastDistance = 50f;
+    [SerializeField] private bool showTargetingDebug = true;
+    [Tooltip("Si est√° marcado, el raycast va hacia arriba. Si no, va hacia adelante")]
+    [SerializeField] private bool useUpwardRaycast = false;
+
+    [Header("Sistema de Comandos - NUEVO")]
+    [SerializeField] private bool showCommandDebug = true;
+    [Tooltip("Velocidad m√≠nima para detectar gestos hacia arriba/abajo")]
+    [SerializeField] private float gestureMinSpeed = 2f;
+    [Tooltip("Tiempo m√≠nimo entre gestos para evitar detecciones m√∫ltiples")]
+    [SerializeField] private float gestureCooldown = 0.5f;
+
     // Referencias a componentes
     private XRGrabInteractable grabInteractable;
 
-    // Lista de todos los controladores que actualmente est·n agarrando este bastÛn
+    // Lista de todos los controladores que actualmente est√°n agarrando este bast√≥n
     private List<XRBaseController> heldByControllers = new List<XRBaseController>();
 
-    // Referencia a las estadÌsticas del jugador
+    // Referencia a las estad√≠sticas del jugador
     private PlayerStatsManager playerStats;
 
-    // Estado de carga
+    // NUEVO: Estado del sistema de hechizos
+    private SpellState currentState = SpellState.IDLE;
+
+    // Estado de carga (EXISTENTE)
     private bool isCharging = false;
     private XRBaseController chargingController = null;
-    private float chargeStartTime; // Tiempo en que comenzÛ la carga
-    private bool chargeComplete; // Indica si la carga ha completado el 100%
-    private float lastProgress = -1f; // Para optimizaciÛn
+    private float chargeStartTime;
+    private bool chargeComplete;
+    private float lastProgress = -1f;
 
-    // Para depuraciÛn
+    // NUEVO: Estado de preparaci√≥n
+    private GameObject preparationEffect = null;
+    private float preparationStartTime;
+    private SpellCastContext currentContext;
+
+    // NUEVO: Sistema de targeting direccional
+    private Vector3 lastTargetPosition;
+    private float targetingStartTime;
+    private bool isTargeting = false;
+
+    // NUEVO: Sistema de detecci√≥n de gestos
+    private Vector3 lastControllerPosition;
+    private Vector3 lastControllerVelocity;
+    private float lastGestureTime = -999f;
+
+    // Para depuraci√≥n
     [SerializeField] private bool showDebugMessages = true;
 
-    // Lista para seguir los cÌrculos activos
+    // Lista para seguir los c√≠rculos activos
     private List<GameObject> activeCircles = new List<GameObject>();
     private List<VFXCircleEffect> activeEffects = new List<VFXCircleEffect>();
 
     // Eventos
     public event Action<SpellBase> OnSpellCast;
     public event Action<bool> OnSpellChargeStateChanged;
+    public event Action<SpellState> OnSpellStateChanged; // NUEVO
 
     #endregion
 
-    #region InicializaciÛn y ConfiguraciÛn
+    #region Inicializaci√≥n y Configuraci√≥n
 
     private void Awake()
     {
@@ -64,7 +108,7 @@ public class MagicStaff : MonoBehaviour
         if (spellSpawnPoint == null)
         {
             spellSpawnPoint = transform;
-            Debug.LogWarning("No se asignÛ un punto de generaciÛn de hechizos. Usando la posiciÛn del bastÛn.");
+            Debug.LogWarning("No se asign√≥ un punto de generaci√≥n de hechizos. Usando la posici√≥n del bast√≥n.");
         }
 
         if (grabInteractable == null)
@@ -92,19 +136,31 @@ public class MagicStaff : MonoBehaviour
         }
 
         // Limpiar estado al desactivar
+        ResetAllState();
+    }
+
+    /// <summary>
+    /// NUEVO: Resetea completamente el estado del bast√≥n
+    /// </summary>
+    private void ResetAllState()
+    {
+        SetSpellState(SpellState.IDLE);
         isCharging = false;
         chargingController = null;
         heldByControllers.Clear();
+        isTargeting = false;
+
         StopAllParticleEffects();
         ClearAllCircles();
+        ClearPreparationEffect();
     }
 
     #endregion
 
-    #region GestiÛn de InteracciÛn VR
+    #region Gesti√≥n de Interacci√≥n VR (Sin cambios significativos)
 
     /// <summary>
-    /// Se llama cuando el bastÛn es agarrado por un controlador VR
+    /// Se llama cuando el bast√≥n es agarrado por un controlador VR
     /// </summary>
     public void OnGrabbed(SelectEnterEventArgs args)
     {
@@ -114,17 +170,14 @@ public class MagicStaff : MonoBehaviour
 
         if (showDebugMessages)
         {
-            Debug.Log($"[{Time.frameCount}] BastÛn agarrado por: {newController.name}");
+            Debug.Log($"[{Time.frameCount}] Bast√≥n agarrado por: {newController.name}");
         }
 
-        // Si este controlador ya estaba en la lista, evitar duplicados
         if (heldByControllers.Contains(newController))
             return;
 
-        // AÒadir este controlador a la lista de controladores que sostienen el bastÛn
         heldByControllers.Add(newController);
 
-        // Verificar si es un controlador dominante para asignar playerStats
         SpellCastController spellController = newController.GetComponent<SpellCastController>();
         if (spellController != null && spellController.IsDominantHand)
         {
@@ -138,7 +191,7 @@ public class MagicStaff : MonoBehaviour
     }
 
     /// <summary>
-    /// Se llama cuando el bastÛn es soltado
+    /// Se llama cuando el bast√≥n es soltado
     /// </summary>
     public void OnReleased(SelectExitEventArgs args)
     {
@@ -148,45 +201,34 @@ public class MagicStaff : MonoBehaviour
 
         if (showDebugMessages)
         {
-            Debug.Log($"[{Time.frameCount}] BastÛn soltado por: {releasedController.name}");
+            Debug.Log($"[{Time.frameCount}] Bast√≥n soltado por: {releasedController.name}");
         }
 
-        // Eliminar este controlador de la lista
         heldByControllers.Remove(releasedController);
 
-        // Si est·bamos cargando con este controlador, cancelar la carga
-        if (isCharging && releasedController == chargingController)
+        // Si est√°bamos cargando o en cualquier estado activo con este controlador, cancelar
+        if ((isCharging || currentState != SpellState.IDLE) && releasedController == chargingController)
         {
             if (showDebugMessages)
             {
-                Debug.Log($"[{Time.frameCount}] Cancelando carga porque el controlador que estaba cargando soltÛ el bastÛn");
+                Debug.Log($"[{Time.frameCount}] Cancelando actividad porque el controlador activo solt√≥ el bast√≥n");
             }
-            CancelCharging(releasedController);
+            CancelCurrentSpell();
         }
 
-        // Si ya no queda ning˙n controlador sosteniendo el bastÛn, reiniciar todo
+        // Actualizar playerStats si es necesario
         if (heldByControllers.Count == 0)
         {
             playerStats = null;
-            if (showDebugMessages)
-            {
-                Debug.Log($"[{Time.frameCount}] Ning˙n controlador sostiene el bastÛn, reiniciando estado");
-            }
         }
         else
         {
-            // Comprobar si queda alg˙n controlador dominante sosteniendo el bastÛn
             foreach (XRBaseController controller in heldByControllers)
             {
                 SpellCastController spellController = controller.GetComponent<SpellCastController>();
                 if (spellController != null && spellController.IsDominantHand)
                 {
                     playerStats = controller.transform.root.GetComponent<PlayerStatsManager>();
-
-                    if (showDebugMessages)
-                    {
-                        Debug.Log($"[{Time.frameCount}] TodavÌa hay un controlador dominante sosteniendo el bastÛn: {controller.name}");
-                    }
                     break;
                 }
             }
@@ -194,7 +236,7 @@ public class MagicStaff : MonoBehaviour
     }
 
     /// <summary>
-    /// Verifica si este bastÛn est· siendo sostenido por un controlador especÌfico
+    /// Verifica si este bast√≥n est√° siendo sostenido por un controlador espec√≠fico
     /// </summary>
     public bool IsHeldBy(XRBaseController controller)
     {
@@ -202,7 +244,7 @@ public class MagicStaff : MonoBehaviour
     }
 
     /// <summary>
-    /// Verifica si este bastÛn est· siendo sostenido por un controlador dominante
+    /// Verifica si este bast√≥n est√° siendo sostenido por un controlador dominante
     /// </summary>
     public bool IsHeldByDominantHand(XRBaseController controller)
     {
@@ -215,24 +257,65 @@ public class MagicStaff : MonoBehaviour
 
     #endregion
 
-    #region Sistema de Carga y Lanzamiento de Hechizos
+    #region Sistema de Estados - NUEVO
+
+    /// <summary>
+    /// Cambia el estado actual del sistema de hechizos
+    /// </summary>
+    private void SetSpellState(SpellState newState)
+    {
+        if (currentState == newState) return;
+
+        SpellState oldState = currentState;
+        currentState = newState;
+
+        if (showCommandDebug)
+        {
+            Debug.Log($"[{Time.frameCount}] Estado cambiado: {oldState} ‚Üí {newState}");
+        }
+
+        OnSpellStateChanged?.Invoke(newState);
+    }
+
+    /// <summary>
+    /// Cancela cualquier actividad de hechizo en curso
+    /// </summary>
+    public void CancelCurrentSpell()
+    {
+        switch (currentState)
+        {
+            case SpellState.CHARGING:
+                CancelCharging(chargingController);
+                break;
+            case SpellState.PREPARED:
+                CancelPreparation();
+                break;
+            case SpellState.EXECUTING:
+                // Los hechizos en ejecuci√≥n no se pueden cancelar
+                break;
+        }
+
+        SetSpellState(SpellState.IDLE);
+    }
+
+    #endregion
+
+    #region Sistema de Carga (MODIFICADO)
 
     /// <summary>
     /// Comienza la carga de un hechizo
     /// </summary>
     public void StartCharging(XRBaseController requestingController)
     {
-        // VerificaciÛn rigurosa: solo el controlador dominante que est· sosteniendo el bastÛn puede cargar
         if (!IsHeldByDominantHand(requestingController))
         {
             if (showDebugMessages)
             {
-                Debug.Log($"[{Time.frameCount}] Ignorando StartCharging de {requestingController.name} - No es dominante o no sostiene el bastÛn");
+                Debug.Log($"[{Time.frameCount}] Ignorando StartCharging de {requestingController.name} - No es dominante o no sostiene el bast√≥n");
             }
             return;
         }
 
-        // Verificaciones adicionales
         if (equippedSpell == null)
         {
             PlayFailedCastFeedback();
@@ -245,33 +328,34 @@ public class MagicStaff : MonoBehaviour
             return;
         }
 
-        // Si ya estamos cargando con otro controlador, cancelar esa carga primero
-        if (isCharging && chargingController != null && chargingController != requestingController)
+        // Cancelar cualquier actividad anterior
+        if (currentState != SpellState.IDLE)
         {
-            CancelCharging(chargingController);
+            CancelCurrentSpell();
         }
 
-        // Limpiar cÌrculos anteriores por si acaso
-        ClearAllCircles();
+        // Cambiar al estado de carga
+        SetSpellState(SpellState.CHARGING);
 
         // Activar estado de carga
         isCharging = true;
         chargingController = requestingController;
-        chargeStartTime = Time.time; // Registrar tiempo de inicio
-        chargeComplete = false; // Reiniciar estado de carga completa
-        lastProgress = -1f; // Reiniciar progreso anterior
+        chargeStartTime = Time.time;
+        chargeComplete = false;
+        lastProgress = -1f;
 
         if (showDebugMessages)
         {
             Debug.Log($"[{Time.frameCount}] Iniciando carga de hechizo con controlador: {requestingController.name}");
         }
 
-        // Verificar si el hechizo tiene configuraciones de cÌrculos
+        // Limpiar c√≠rculos anteriores
+        ClearAllCircles();
+
+        // Crear c√≠rculos m√°gicos si los hay
         if (equippedSpell != null && equippedSpell.HasMagicCircles())
         {
             MagicCircleConfig[] circleConfigs = equippedSpell.GetMagicCircles();
-
-            // Crear cada cÌrculo configurado
             foreach (MagicCircleConfig config in circleConfigs)
             {
                 if (config.circlePrefab != null)
@@ -289,53 +373,36 @@ public class MagicStaff : MonoBehaviour
     }
 
     /// <summary>
-    /// Finaliza la carga y lanza el hechizo si se cumple el tiempo mÌnimo
+    /// Finaliza la carga - MODIFICADO para manejar preparaci√≥n
     /// </summary>
     public void FinishCharging(XRBaseController requestingController, float chargeTime)
     {
-        // VerificaciÛn rigurosa: solo el controlador que iniciÛ la carga puede finalizarla
-        if (chargingController != requestingController)
+        if (chargingController != requestingController || !isCharging)
         {
             if (showDebugMessages)
             {
-                Debug.Log($"[{Time.frameCount}] Ignorando FinishCharging de {requestingController.name} - No es el controlador que iniciÛ la carga");
-            }
-            return;
-        }
-
-        // VerificaciÛn adicional: asegurarse de que seguimos en estado de carga
-        if (!isCharging)
-        {
-            if (showDebugMessages)
-            {
-                Debug.Log($"[{Time.frameCount}] Ignorando FinishCharging porque no estamos en estado de carga");
+                Debug.Log($"[{Time.frameCount}] Ignorando FinishCharging - controlador incorrecto o no estamos cargando");
             }
             return;
         }
 
         // Desactivar estado de carga
         isCharging = false;
-
-        // Detener efectos visuales de carga
         PlayChargingEffects(false);
-
-        // Notificar cambio de estado
-        OnSpellChargeStateChanged?.Invoke(false);
 
         if (showDebugMessages)
         {
-            Debug.Log($"[{Time.frameCount}] Finalizando carga de hechizo con tiempo: {chargeTime}s");
+            Debug.Log($"[{Time.frameCount}] Finalizando carga con tiempo: {chargeTime}s");
         }
 
-        // Verificar si hay un hechizo equipado
+        // Verificaciones b√°sicas
         if (equippedSpell == null)
         {
             PlayFailedCastFeedback();
-            ClearAllCircles();
+            SetSpellState(SpellState.IDLE);
             return;
         }
 
-        // Verificar tiempo mÌnimo de carga del hechizo equipado
         if (chargeTime < equippedSpell.MinChargeTime)
         {
             if (showDebugMessages)
@@ -343,52 +410,36 @@ public class MagicStaff : MonoBehaviour
                 Debug.Log($"[{Time.frameCount}] Tiempo de carga insuficiente. Requerido: {equippedSpell.MinChargeTime}s, Actual: {chargeTime}s");
             }
             PlayCancelEffects();
-            ClearAllCircles();
+            SetSpellState(SpellState.IDLE);
             return;
         }
 
-        // Verificar si tenemos suficiente mana
         if (playerStats == null || !playerStats.Mana.CanCastSpell(equippedSpell.ManaCost))
         {
             PlayInsufficientManaFeedback();
-            ClearAllCircles();
+            SetSpellState(SpellState.IDLE);
             return;
         }
 
-        // Verificar si el hechizo est· listo (cooldown)
         if (!equippedSpell.IsReady())
         {
-            if (showDebugMessages)
-            {
-                Debug.Log($"[{Time.frameCount}] Hechizo en cooldown");
-            }
             PlayCooldownFeedback();
-            ClearAllCircles();
+            SetSpellState(SpellState.IDLE);
             return;
         }
 
-        // Iniciar animaciÛn de desapariciÛn de cÌrculos antes de lanzar
-        StartCoroutine(FadeOutCircles());
+        // ===== NUEVO: Decidir si necesita preparaci√≥n o ejecuci√≥n inmediata =====
 
-        // Lanzar el hechizo
-        if (showDebugMessages)
+        if (equippedSpell.CommandType == SpellCommandType.INSTANT)
         {
-            Debug.Log($"[{Time.frameCount}] °Lanzando hechizo!");
+            // Ejecutar inmediatamente
+            ExecuteSpellDirectly();
         }
-        equippedSpell.Cast(spellSpawnPoint, playerStats);
-
-        // Consumir mana
-        playerStats.Mana.CastSpell(equippedSpell.ManaCost);
-
-        // Efectos visuales/sonoros de lanzamiento
-        PlayCastingEffects();
-
-        // Reiniciar estado
-        chargingController = null;
-        chargeComplete = false;
-
-        // Notificar a los suscriptores
-        OnSpellCast?.Invoke(equippedSpell);
+        else
+        {
+            // Pasar a fase de preparaci√≥n
+            StartPreparation();
+        }
     }
 
     /// <summary>
@@ -396,90 +447,553 @@ public class MagicStaff : MonoBehaviour
     /// </summary>
     public void CancelCharging(XRBaseController requestingController)
     {
-        // Solo permitir cancelar al controlador que iniciÛ la carga o a un controlador dominante
         if (chargingController != requestingController && !IsHeldByDominantHand(requestingController))
         {
-            if (showDebugMessages)
-            {
-                Debug.Log($"[{Time.frameCount}] Ignorando CancelCharging de {requestingController.name} - No es el controlador adecuado");
-            }
             return;
         }
 
-        // Solo procesar si est·bamos cargando
-        if (!isCharging)
-        {
-            if (showDebugMessages)
-            {
-                Debug.Log($"[{Time.frameCount}] Ignorando CancelCharging porque no estamos en estado de carga");
-            }
-            return;
-        }
+        if (!isCharging) return;
 
         if (showDebugMessages)
         {
             Debug.Log($"[{Time.frameCount}] Cancelando carga de hechizo");
         }
 
-        // Desactivar estado de carga
         isCharging = false;
-
-        // Detener efectos visuales de carga y sonido
         PlayChargingEffects(false);
-
-        // Mostrar efectos de cancelaciÛn
         PlayCancelEffects();
-
-        // Iniciar desapariciÛn gradual de cÌrculos
         StartCoroutine(FadeOutCircles());
 
-        // Reiniciar estado
         chargingController = null;
         chargeComplete = false;
 
-        // Notificar cambio de estado
+        SetSpellState(SpellState.IDLE);
         OnSpellChargeStateChanged?.Invoke(false);
     }
 
+    #endregion
+
+    #region Sistema de Preparaci√≥n - NUEVO
+
+    /// <summary>
+    /// Inicia la fase de preparaci√≥n del hechizo
+    /// </summary>
+    private void StartPreparation()
+    {
+        SetSpellState(SpellState.PREPARED);
+        preparationStartTime = Time.time;
+
+        // Crear contexto del hechizo
+        currentContext = CreateSpellContext();
+
+        // Crear efecto de preparaci√≥n si existe
+        if (equippedSpell.HasPreparationPrefab)
+        {
+            preparationEffect = equippedSpell.CreatePreparationEffect(currentContext);
+        }
+
+        // Inicializar sistema de targeting si es necesario
+        if (equippedSpell.CommandType == SpellCommandType.DIRECTIONAL)
+        {
+            StartTargeting();
+        }
+
+        if (showCommandDebug)
+        {
+            Debug.Log($"[{Time.frameCount}] Hechizo preparado. Tipo de comando: {equippedSpell.CommandType}");
+        }
+    }
+
+    /// <summary>
+    /// Cancela la preparaci√≥n
+    /// </summary>
+    private void CancelPreparation()
+    {
+        if (currentState != SpellState.PREPARED) return;
+
+        if (showCommandDebug)
+        {
+            Debug.Log($"[{Time.frameCount}] Cancelando preparaci√≥n");
+        }
+
+        ClearPreparationEffect();
+        StopTargeting();
+        StartCoroutine(FadeOutCircles());
+
+        SetSpellState(SpellState.IDLE);
+    }
+
+    /// <summary>
+    /// Limpia el efecto de preparaci√≥n
+    /// </summary>
+    private void ClearPreparationEffect()
+    {
+        if (preparationEffect != null)
+        {
+            Destroy(preparationEffect);
+            preparationEffect = null;
+        }
+    }
+
+    #endregion
+
+    #region Sistema de Targeting Direccional - NUEVO
+
+    /// <summary>
+    /// Inicia el sistema de targeting direccional
+    /// </summary>
+    private void StartTargeting()
+    {
+        isTargeting = false; // Resetear estado
+        lastTargetPosition = Vector3.zero;
+        targetingStartTime = 0f;
+    }
+
+    /// <summary>
+    /// Detiene el sistema de targeting
+    /// </summary>
+    private void StopTargeting()
+    {
+        isTargeting = false;
+    }
+
+    /// <summary>
+    /// Actualiza el sistema de targeting (llamado desde Update)
+    /// </summary>
+    private void UpdateTargeting()
+    {
+        if (currentState != SpellState.PREPARED) return;
+        if (equippedSpell.CommandType != SpellCommandType.DIRECTIONAL) return;
+
+        // Obtener nueva posici√≥n objetivo
+        Vector3 currentTargetPosition;
+        bool hasValidTarget = GetCurrentTargetPosition(out currentTargetPosition);
+
+        if (!hasValidTarget)
+        {
+            // No hay objetivo v√°lido, resetear targeting
+            if (isTargeting)
+            {
+                isTargeting = false;
+                if (showCommandDebug)
+                {
+                    Debug.Log($"[{Time.frameCount}] Targeting perdido - no hay objetivo v√°lido");
+                }
+            }
+            return;
+        }
+
+        // Verificar si el jugador est√° apuntando al mismo lugar
+        float distance = Vector3.Distance(currentTargetPosition, lastTargetPosition);
+
+        if (distance <= equippedSpell.AimTolerance)
+        {
+            // Est√° apuntando al mismo lugar
+            if (!isTargeting)
+            {
+                // Comenzar targeting
+                isTargeting = true;
+                targetingStartTime = Time.time;
+                lastTargetPosition = currentTargetPosition;
+
+                if (showCommandDebug)
+                {
+                    Debug.Log($"[{Time.frameCount}] Targeting iniciado en posici√≥n: {currentTargetPosition}");
+                }
+            }
+            else
+            {
+                // Verificar si ha mantenido la posici√≥n el tiempo suficiente
+                float holdTime = Time.time - targetingStartTime;
+                if (holdTime >= equippedSpell.AimHoldTime)
+                {
+                    // ¬°Targeting completado!
+                    ExecuteDirectionalSpell(currentTargetPosition);
+                }
+            }
+        }
+        else
+        {
+            // Se movi√≥ demasiado, resetear
+            if (isTargeting)
+            {
+                isTargeting = false;
+                if (showCommandDebug)
+                {
+                    Debug.Log($"[{Time.frameCount}] Targeting resetado - se movi√≥ demasiado (distancia: {distance})");
+                }
+            }
+            lastTargetPosition = currentTargetPosition;
+        }
+    }
+
+    /// <summary>
+    /// Ejecuta un hechizo direccional con la posici√≥n objetivo
+    /// </summary>
+    private void ExecuteDirectionalSpell(Vector3 targetPosition)
+    {
+        if (showCommandDebug)
+        {
+            Debug.Log($"[{Time.frameCount}] Ejecutando hechizo direccional PRECISO hacia: {targetPosition}");
+        }
+
+        // Actualizar contexto con informaci√≥n de targeting PRECISO
+        currentContext.targetPosition = targetPosition;
+        currentContext.hasValidTarget = true;
+        currentContext.commandUsed = SpellCommandType.DIRECTIONAL;
+        currentContext.commandDirection = (targetPosition - spellSpawnPoint.position).normalized;
+        currentContext.commandIntensity = 1f; // M√ÅXIMA intensidad porque complet√≥ el targeting preciso
+
+        ExecuteSpellWithContext(currentContext);
+    }
+
+    #endregion
+
+    #region Sistema de Detecci√≥n de Gestos - NUEVO
+
+    /// <summary>
+    /// Actualiza la detecci√≥n de gestos (llamado desde Update)
+    /// </summary>
+    private void UpdateGestureDetection()
+    {
+        if (currentState != SpellState.PREPARED) return;
+        if (chargingController == null) return;
+
+        // Solo detectar gestos para hechizos que los requieren
+        SpellCommandType commandType = equippedSpell.CommandType;
+        if (commandType != SpellCommandType.EMERGE && commandType != SpellCommandType.DESCEND)
+            return;
+
+        // Calcular velocidad del controlador
+        Vector3 currentPosition = chargingController.transform.position;
+        Vector3 currentVelocity = (currentPosition - lastControllerPosition) / Time.deltaTime;
+
+        // Verificar cooldown entre gestos
+        if (Time.time - lastGestureTime < gestureCooldown)
+        {
+            lastControllerPosition = currentPosition;
+            lastControllerVelocity = currentVelocity;
+            return;
+        }
+
+        // Detectar gesto hacia arriba (EMERGE)
+        if (commandType == SpellCommandType.EMERGE)
+        {
+            if (currentVelocity.y > gestureMinSpeed && lastControllerVelocity.y > gestureMinSpeed)
+            {
+                ExecuteGestureSpell(SpellCommandType.EMERGE, Vector3.up, currentVelocity.y);
+                lastGestureTime = Time.time;
+            }
+        }
+        // Detectar gesto hacia abajo (DESCEND)
+        else if (commandType == SpellCommandType.DESCEND)
+        {
+            if (currentVelocity.y < -gestureMinSpeed && lastControllerVelocity.y < -gestureMinSpeed)
+            {
+                ExecuteGestureSpell(SpellCommandType.DESCEND, Vector3.down, Mathf.Abs(currentVelocity.y));
+                lastGestureTime = Time.time;
+            }
+        }
+
+        // Actualizar estado anterior
+        lastControllerPosition = currentPosition;
+        lastControllerVelocity = currentVelocity;
+    }
+
+    /// <summary>
+    /// Ejecuta un hechizo activado por gesto
+    /// </summary>
+    private void ExecuteGestureSpell(SpellCommandType gestureType, Vector3 direction, float intensity)
+    {
+        if (showCommandDebug)
+        {
+            Debug.Log($"[{Time.frameCount}] Gesto detectado: {gestureType} con intensidad: {intensity}");
+        }
+
+        // Actualizar contexto con informaci√≥n del gesto
+        currentContext.commandUsed = gestureType;
+        currentContext.commandDirection = direction;
+        currentContext.commandIntensity = intensity;
+
+        ExecuteSpellWithContext(currentContext);
+    }
+
+    #endregion
+
+    #region Ejecuci√≥n de Hechizos - MODIFICADO
+
+    /// <summary>
+    /// Ejecuta un hechizo inmediatamente (sin preparaci√≥n)
+    /// </summary>
+    private void ExecuteSpellDirectly()
+    {
+        SetSpellState(SpellState.EXECUTING);
+
+        // Crear contexto y ejecutar
+        SpellCastContext context = CreateSpellContext();
+        context.commandUsed = SpellCommandType.INSTANT;
+
+        ExecuteSpellWithContext(context);
+    }
+
+    /// <summary>
+    /// Ejecuta el hechizo con el contexto dado
+    /// </summary>
+    private void ExecuteSpellWithContext(SpellCastContext context)
+    {
+        SetSpellState(SpellState.EXECUTING);
+
+        if (showDebugMessages)
+        {
+            Debug.Log($"[{Time.frameCount}] Ejecutando hechizo: {equippedSpell.name} con comando: {context.commandUsed}");
+        }
+
+        // Limpiar efectos de preparaci√≥n
+        ClearPreparationEffect();
+        StartCoroutine(FadeOutCircles());
+
+        // Consumir mana
+        playerStats.Mana.CastSpell(equippedSpell.ManaCost);
+
+        // Ejecutar el hechizo
+        equippedSpell.Cast(context);
+
+        // Efectos de lanzamiento
+        PlayCastingEffects();
+
+        // Resetear estado
+        chargingController = null;
+        chargeComplete = false;
+
+        // Notificar
+        OnSpellCast?.Invoke(equippedSpell);
+
+        // Volver al estado idle
+        SetSpellState(SpellState.IDLE);
+    }
+
+    /// <summary>
+    /// Crea el contexto actual del hechizo
+    /// </summary>
+    private SpellCastContext CreateSpellContext()
+    {
+        SpellCastContext context = new SpellCastContext(
+            spellSpawnPoint,
+            playerStats.transform,
+            playerStats
+        );
+
+        // Obtener informaci√≥n del objetivo mediante raycast
+        Vector3 currentTargetPosition;
+        if (GetCurrentTargetPosition(out currentTargetPosition))
+        {
+            RaycastHit hitInfo;
+            Vector3 rayOrigin = spellSpawnPoint.position;
+            Vector3 rayDirection = useUpwardRaycast ? spellSpawnPoint.up : spellSpawnPoint.forward;
+
+            if (Physics.Raycast(rayOrigin, rayDirection, out hitInfo, maxRaycastDistance, raycastLayers))
+            {
+                context.targetPosition = hitInfo.point;
+                context.targetNormal = hitInfo.normal;
+                context.hasValidTarget = true;
+            }
+            else
+            {
+                context.targetPosition = rayOrigin + rayDirection * maxRaycastDistance;
+                context.targetNormal = Vector3.up;
+                context.hasValidTarget = false;
+            }
+        }
+
+        return context;
+    }
+
+    /// <summary>
+    /// Obtiene la posici√≥n objetivo actual basada en el raycast
+    /// </summary>
+    private bool GetCurrentTargetPosition(out Vector3 targetPosition)
+    {
+        RaycastHit hitInfo;
+        Vector3 rayOrigin = spellSpawnPoint.position;
+        Vector3 rayDirection = useUpwardRaycast ? spellSpawnPoint.up : spellSpawnPoint.forward;
+
+        if (Physics.Raycast(rayOrigin, rayDirection, out hitInfo, maxRaycastDistance, raycastLayers))
+        {
+            targetPosition = hitInfo.point;
+            return true;
+        }
+
+        targetPosition = rayOrigin + rayDirection * maxRaycastDistance;
+        return false;
+    }
+
+    #endregion
+
+    #region Update y Timeouts - MODIFICADO
+
     private void Update()
     {
-        // Solo procesar si estamos en estado de carga
-        if (!isCharging || equippedSpell == null) return;
+        // Actualizar carga (existente)
+        if (isCharging && equippedSpell != null)
+        {
+            UpdateChargingProgress();
+        }
 
-        // Calcular progreso de carga
+        // NUEVO: Actualizar sistemas seg√∫n el estado
+        switch (currentState)
+        {
+            case SpellState.PREPARED:
+                UpdatePreparationState();
+                UpdateTargeting();
+                UpdateGestureDetection();
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Actualiza el progreso de carga (existente, sin cambios)
+    /// </summary>
+    private void UpdateChargingProgress()
+    {
         float chargeTime = Time.time - chargeStartTime;
         float progress = Mathf.Clamp01(chargeTime / equippedSpell.MinChargeTime);
 
-        // Solo actualizar si hay un cambio significativo (optimizaciÛn)
         if (Mathf.Abs(lastProgress - progress) > 0.01f)
         {
             lastProgress = progress;
 
-            // Actualizar cÌrculos m·gicos
             foreach (VFXCircleEffect effect in activeEffects)
             {
                 if (effect == null) continue;
                 effect.UpdateProgress(progress);
             }
 
-            // Completar la carga cuando llegue al 100%
             if (progress >= 1.0f && !chargeComplete)
             {
                 chargeComplete = true;
-
-                // Opcional: Feedback de vibraciÛn
-                // (cÛdigo para vibraciÛn si existe)
             }
         }
     }
 
+    /// <summary>
+    /// NUEVO: Actualiza el estado de preparaci√≥n (timeouts, etc.)
+    /// </summary>
+    private void UpdatePreparationState()
+    {
+        // Verificar timeout si est√° configurado
+        if (equippedSpell.CommandTimeout > 0)
+        {
+            float preparationTime = Time.time - preparationStartTime;
+            if (preparationTime > equippedSpell.CommandTimeout)
+            {
+                if (showCommandDebug)
+                {
+                    Debug.Log($"[{Time.frameCount}] Timeout de preparaci√≥n alcanzado");
+                }
+
+                // Comportamiento espec√≠fico seg√∫n el tipo de comando
+                switch (equippedSpell.CommandType)
+                {
+                    case SpellCommandType.DIRECTIONAL:
+                        // Para hechizos direccionales, disparar hacia donde apunta actualmente
+                        ExecuteDirectionalTimeoutSpell();
+                        break;
+
+                    case SpellCommandType.EMERGE:
+                    case SpellCommandType.DESCEND:
+                        // Para hechizos de gesto, ejecutar autom√°ticamente si se permite fallback
+                        if (equippedSpell.AllowInstantFallback)
+                        {
+                            if (showCommandDebug)
+                            {
+                                Debug.Log($"[{Time.frameCount}] Ejecutando hechizo de gesto autom√°ticamente por timeout");
+                            }
+                            currentContext.commandUsed = SpellCommandType.INSTANT;
+                            currentContext.commandIntensity = 1f; // Intensidad por defecto
+                            ExecuteSpellWithContext(currentContext);
+                        }
+                        else
+                        {
+                            if (showCommandDebug)
+                            {
+                                Debug.Log($"[{Time.frameCount}] Cancelando hechizo de gesto por timeout (no permite fallback)");
+                            }
+                            CancelPreparation();
+                        }
+                        break;
+
+                    case SpellCommandType.INSTANT:
+                        // Los hechizos instant√°neos no deber√≠an llegar aqu√≠, pero por si acaso
+                        currentContext.commandUsed = SpellCommandType.INSTANT;
+                        ExecuteSpellWithContext(currentContext);
+                        break;
+
+                    default:
+                        // Fallback general
+                        if (equippedSpell.AllowInstantFallback)
+                        {
+                            currentContext.commandUsed = SpellCommandType.INSTANT;
+                            ExecuteSpellWithContext(currentContext);
+                        }
+                        else
+                        {
+                            CancelPreparation();
+                        }
+                        break;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// NUEVO: Ejecuta un hechizo direccional cuando se acaba el timeout
+    /// Dispara hacia donde est√© apuntando en ese momento
+    /// </summary>
+    private void ExecuteDirectionalTimeoutSpell()
+    {
+        if (showCommandDebug)
+        {
+            Debug.Log($"[{Time.frameCount}] Ejecutando hechizo direccional por timeout - disparando hacia la direcci√≥n actual");
+        }
+
+        // Obtener la posici√≥n objetivo actual (hacia donde apunta ahora)
+        Vector3 currentTargetPosition;
+        bool hasValidTarget = GetCurrentTargetPosition(out currentTargetPosition);
+
+        // Actualizar contexto con la informaci√≥n actual
+        if (hasValidTarget)
+        {
+            currentContext.targetPosition = currentTargetPosition;
+            currentContext.hasValidTarget = true;
+        }
+        else
+        {
+            // Si no hay objetivo v√°lido, usar la direcci√≥n del bast√≥n
+            Vector3 rayDirection = useUpwardRaycast ? spellSpawnPoint.up : spellSpawnPoint.forward;
+            currentContext.targetPosition = spellSpawnPoint.position + rayDirection * maxRaycastDistance;
+            currentContext.hasValidTarget = false;
+        }
+
+        // Configurar como comando direccional pero sin el bonus de precisi√≥n
+        currentContext.commandUsed = SpellCommandType.DIRECTIONAL;
+        currentContext.commandDirection = (currentContext.targetPosition - spellSpawnPoint.position).normalized;
+        currentContext.commandIntensity = 0.5f; // Menor intensidad porque no fue targeting preciso
+
+        if (showCommandDebug)
+        {
+            Debug.Log($"[{Time.frameCount}] Disparando hacia: {currentContext.targetPosition} | V√°lido: {hasValidTarget}");
+        }
+
+        // Ejecutar el hechizo
+        ExecuteSpellWithContext(currentContext);
+    }
+
     #endregion
 
-    #region Efectos Visuales y Sonoros
+    #region Efectos Visuales y Sonoros (Mayormente sin cambios)
 
     private IEnumerator FadeOutCircles()
     {
-        // Iniciar animaciÛn de desapariciÛn en cada cÌrculo
         foreach (VFXCircleEffect effect in activeEffects)
         {
             if (effect != null)
@@ -488,16 +1002,10 @@ public class MagicStaff : MonoBehaviour
             }
         }
 
-        // Esperar un tiempo para la animaciÛn
         yield return new WaitForSeconds(0.5f);
-
-        // Limpiar
         ClearAllCircles();
     }
 
-    /// <summary>
-    /// Activa efectos visuales y sonoros al lanzar un hechizo
-    /// </summary>
     private void PlayCastingEffects()
     {
         if (castingVFX != null && !castingVFX.isPlaying)
@@ -505,16 +1013,12 @@ public class MagicStaff : MonoBehaviour
             castingVFX.Play();
         }
 
-        // Usar el nuevo sistema de audio
         if (audioController != null)
         {
             audioController.Play(castSoundId);
         }
     }
 
-    /// <summary>
-    /// Activa/desactiva efectos visuales durante la carga
-    /// </summary>
     private void PlayChargingEffects(bool activate)
     {
         if (chargingVFX != null)
@@ -522,19 +1026,14 @@ public class MagicStaff : MonoBehaviour
             if (activate && !chargingVFX.isPlaying)
             {
                 chargingVFX.Play();
-
-                // Utiliza la configuraciÛn de fade especÌfica del sonido
                 if (audioController != null)
                 {
-                    // El mÈtodo Play ahora usar· autom·ticamente el fade configurado
                     audioController.Play(chargingSoundId);
                 }
             }
             else if (!activate && chargingVFX.isPlaying)
             {
                 chargingVFX.Stop();
-
-                // Al detener, tambiÈn usar· la configuraciÛn de fade especÌfica
                 if (audioController != null)
                 {
                     audioController.StopSound(chargingSoundId, true);
@@ -559,45 +1058,30 @@ public class MagicStaff : MonoBehaviour
 
     private IEnumerator CreateDelayedCircle(MagicCircleConfig config)
     {
-        // Si ya no estamos cargando, salir
         if (!isCharging)
             yield break;
 
-        // Calcular posiciÛn
         Vector3 position = spellSpawnPoint.position +
                           spellSpawnPoint.TransformDirection(config.positionOffset);
 
-        // Instanciar cÌrculo
         GameObject circle = Instantiate(config.circlePrefab,
                                        position,
                                        spellSpawnPoint.rotation,
                                        spellSpawnPoint);
 
-        // Obtener componente
         VFXCircleEffect effect = circle.GetComponent<VFXCircleEffect>();
 
-        // Si tiene el componente, activar efecto
         if (effect != null)
         {
             effect.isDecorative = false;
-
-            // IMPORTANTE: Configurar tiempo total de carga y delay especÌfico
             effect.InitializeWithDelay(config.appearDelay, equippedSpell.MinChargeTime);
-
-            // Iniciar efecto
             effect.StartChargeEffect();
-
-            // Registrar para actualizaciones
             activeEffects.Add(effect);
         }
 
-        // Registrar para limpieza
         activeCircles.Add(circle);
     }
 
-    /// <summary>
-    /// Activa efectos visuales de cancelaciÛn
-    /// </summary>
     private void PlayCancelEffects()
     {
         if (cancelVFX != null)
@@ -605,40 +1089,27 @@ public class MagicStaff : MonoBehaviour
             cancelVFX.Play();
         }
 
-        // Usar el nuevo sistema de audio
         if (audioController != null)
         {
             audioController.Play(cancelSoundId);
         }
     }
 
-    /// <summary>
-    /// Feedback cuando no hay suficiente mana
-    /// </summary>
     private void PlayInsufficientManaFeedback()
     {
-        Debug.Log("°Mana insuficiente!");
+        Debug.Log("¬°Mana insuficiente!");
     }
 
-    /// <summary>
-    /// Feedback cuando el hechizo est· en cooldown
-    /// </summary>
     private void PlayCooldownFeedback()
     {
-        Debug.Log("°Hechizo en cooldown!");
+        Debug.Log("¬°Hechizo en cooldown!");
     }
 
-    /// <summary>
-    /// Feedback cuando falla el lanzamiento por otras razones
-    /// </summary>
     private void PlayFailedCastFeedback()
     {
-        Debug.Log("°No hay hechizo equipado!");
+        Debug.Log("¬°No hay hechizo equipado!");
     }
 
-    /// <summary>
-    /// Detiene todos los efectos de partÌculas
-    /// </summary>
     private void StopAllParticleEffects()
     {
         if (castingVFX != null && castingVFX.isPlaying)
@@ -650,7 +1121,6 @@ public class MagicStaff : MonoBehaviour
         if (cancelVFX != null && cancelVFX.isPlaying)
             cancelVFX.Stop();
 
-        // Detener todos los sonidos
         if (audioController != null)
         {
             audioController.StopAllSounds(false);
@@ -659,36 +1129,85 @@ public class MagicStaff : MonoBehaviour
 
     #endregion
 
-    #region DepuraciÛn
+    #region Depuraci√≥n - ACTUALIZADO
 
-    // MÈtodo para ayudar a depurar el estado actual
     private void OnGUI()
     {
         if (!showDebugMessages) return;
 
-        // Solo para depuraciÛn en editor
 #if UNITY_EDITOR
         int y = 10;
-        GUI.Label(new Rect(10, y, 500, 20), $"MagicStaff Status: isCharging={isCharging}");
+        GUI.Label(new Rect(10, y, 500, 20), $"Estado: {currentState} | Cargando: {isCharging}");
         y += 20;
 
-        if (chargingController != null)
+        if (currentState == SpellState.PREPARED && equippedSpell != null)
         {
-            GUI.Label(new Rect(10, y, 500, 20), $"Charging Controller: {chargingController.name}");
+            GUI.Label(new Rect(10, y, 500, 20), $"Comando requerido: {equippedSpell.CommandType}");
             y += 20;
-        }
 
-        GUI.Label(new Rect(10, y, 500, 20), $"Controllers holding staff: {heldByControllers.Count}");
-        y += 20;
+            // Mostrar timeout
+            if (equippedSpell.CommandTimeout > 0)
+            {
+                float remainingTime = equippedSpell.CommandTimeout - (Time.time - preparationStartTime);
+                GUI.Label(new Rect(10, y, 500, 20), $"Tiempo restante: {remainingTime:F1}s");
+                y += 20;
+            }
 
-        foreach (XRBaseController controller in heldByControllers)
-        {
-            SpellCastController spellController = controller.GetComponent<SpellCastController>();
-            bool isDominant = spellController != null && spellController.IsDominantHand;
-            GUI.Label(new Rect(10, y, 500, 20), $"- {controller.name} (Dominant: {isDominant})");
-            y += 20;
+            if (equippedSpell.CommandType == SpellCommandType.DIRECTIONAL)
+            {
+                GUI.Label(new Rect(10, y, 500, 20), $"Targeting: {isTargeting}");
+                y += 20;
+                if (isTargeting)
+                {
+                    float progress = (Time.time - targetingStartTime) / equippedSpell.AimHoldTime;
+                    GUI.Label(new Rect(10, y, 500, 20), $"Progreso targeting PRECISO: {progress:F2}");
+                    y += 20;
+                }
+                else
+                {
+                    GUI.Label(new Rect(10, y, 500, 20), $"Al timeout ‚Üí Disparo autom√°tico hacia donde apunte");
+                    y += 20;
+                }
+            }
         }
 #endif
+    }
+
+    /// <summary>
+    /// MODIFICADO: Visualizaci√≥n del raycast hacia arriba
+    /// </summary>
+    private void OnDrawGizmos()
+    {
+        if (!showTargetingDebug || spellSpawnPoint == null) return;
+
+        Vector3 rayOrigin = spellSpawnPoint.position;
+        Vector3 rayDirection = useUpwardRaycast ? spellSpawnPoint.up : spellSpawnPoint.forward;
+
+        RaycastHit hitInfo;
+        if (Physics.Raycast(rayOrigin, rayDirection, out hitInfo, maxRaycastDistance, raycastLayers))
+        {
+            Gizmos.color = Color.green;
+            Gizmos.DrawLine(rayOrigin, hitInfo.point);
+
+            Gizmos.color = Color.red;
+            Gizmos.DrawSphere(hitInfo.point, 0.1f);
+
+            Gizmos.color = Color.blue;
+            Gizmos.DrawLine(hitInfo.point, hitInfo.point + hitInfo.normal * 0.5f);
+
+            // NUEVO: Visualizar √°rea de tolerancia para targeting
+            if (currentState == SpellState.PREPARED && equippedSpell != null &&
+                equippedSpell.CommandType == SpellCommandType.DIRECTIONAL && isTargeting)
+            {
+                Gizmos.color = Color.yellow;
+                Gizmos.DrawWireSphere(hitInfo.point, equippedSpell.AimTolerance);
+            }
+        }
+        else
+        {
+            Gizmos.color = Color.gray;
+            Gizmos.DrawLine(rayOrigin, rayOrigin + rayDirection * maxRaycastDistance);
+        }
     }
 
     #endregion
