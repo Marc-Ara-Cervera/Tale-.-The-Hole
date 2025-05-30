@@ -25,10 +25,10 @@ MonoBehaviour:
   commandType: 0
   preparationPrefab: {fileID: 7453050466094432560, guid: ddfe71f7ac3b2884aa1905cb16d9dbfb,
     type: 3}
-  commandTimeout: 3.2
+  commandTimeout: 6
   allowInstantFallback: 0
   aimHoldTime: 1.5
-  aimTolerance: 0.15
+  aimTolerance: 0.5
   minimumGestureSpeed: 2.5
   manaCost: 20
   cooldownTime: 5

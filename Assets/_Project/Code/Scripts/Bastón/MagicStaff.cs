@@ -41,10 +41,16 @@ public class MagicStaff : MonoBehaviour
     [SerializeField] private LayerMask raycastLayers = -1;
     [SerializeField] private float maxRaycastDistance = 50f;
     [SerializeField] private bool showTargetingDebug = true;
+
     [Tooltip("Si está marcado, el raycast va hacia arriba. Si no, va hacia adelante")]
     [SerializeField] private bool useUpwardRaycast = false;
+    [Header("Configuración de Raycast")]
+    [Tooltip("Transform desde donde sale el raycast. Si está vacío, usa spellSpawnPoint")]
+    [SerializeField] private Transform raycastOrigin;
+    [Tooltip("Si está marcado, usa la rotación del raycastOrigin para la dirección. Si no, usa spellSpawnPoint")]
+    [SerializeField] private bool useRaycastOriginRotation = true;
 
-    [Header("Sistema de Comandos - NUEVO")]
+    [Header("Sistema de Comandos")]
     [SerializeField] private bool showCommandDebug = true;
     [Tooltip("Velocidad mínima para detectar gestos hacia arriba/abajo")]
     [SerializeField] private float gestureMinSpeed = 2f;
@@ -748,7 +754,20 @@ public class MagicStaff : MonoBehaviour
             Debug.Log($"[{Time.frameCount}] Ejecutando hechizo: {equippedSpell.name} con comando: {context.commandUsed}");
         }
 
-        // Limpiar efectos de preparación
+        // NUEVO: Para hechizos direccionales, si hay un efecto de preparación activo,
+        // modificar el contexto para que use esa posición como origen
+        if (context.commandUsed == SpellCommandType.DIRECTIONAL && preparationEffect != null)
+        {
+            // Crear un contexto modificado que use la posición del efecto de preparación
+            context = CreateModifiedContextForPreparationEffect(context);
+
+            if (showDebugMessages)
+            {
+                Debug.Log($"[{Time.frameCount}] Usando posición del efecto de preparación: {preparationEffect.transform.position}");
+            }
+        }
+
+        // Limpiar efectos de preparación ANTES de ejecutar
         ClearPreparationEffect();
         StartCoroutine(FadeOutCircles());
 
@@ -773,6 +792,44 @@ public class MagicStaff : MonoBehaviour
     }
 
     /// <summary>
+    /// NUEVO: Crea un contexto modificado que usa la posición del efecto de preparación
+    /// como punto de origen en lugar del bastón
+    /// </summary>
+    private SpellCastContext CreateModifiedContextForPreparationEffect(SpellCastContext originalContext)
+    {
+        // Crear un nuevo contexto basado en el original
+        SpellCastContext modifiedContext = originalContext;
+
+        // Crear un transform temporal que combine la posición del efecto de preparación
+        // con la rotación del bastón (para mantener la dirección de lanzamiento correcta)
+        GameObject tempOrigin = new GameObject("TempSpellOrigin");
+        tempOrigin.transform.position = preparationEffect.transform.position;
+        tempOrigin.transform.rotation = spellSpawnPoint.rotation; // Usar rotación del bastón
+
+        // Actualizar el contexto para usar este transform temporal
+        modifiedContext.staffTransform = tempOrigin.transform;
+
+        // Destruir el objeto temporal después de un frame (el hechizo ya habrá leído los valores)
+        StartCoroutine(DestroyTempOriginAfterDelay(tempOrigin));
+
+        return modifiedContext;
+    }
+
+    /// <summary>
+    /// NUEVO: Destruye el transform temporal después de un pequeño delay
+    /// </summary>
+    private System.Collections.IEnumerator DestroyTempOriginAfterDelay(GameObject tempOrigin)
+    {
+        // Esperar un frame para que el hechizo lea los valores
+        yield return null;
+
+        if (tempOrigin != null)
+        {
+            Destroy(tempOrigin);
+        }
+    }
+
+    /// <summary>
     /// Crea el contexto actual del hechizo
     /// </summary>
     private SpellCastContext CreateSpellContext()
@@ -783,19 +840,29 @@ public class MagicStaff : MonoBehaviour
             playerStats
         );
 
-        // Obtener información del objetivo mediante raycast
+        //  Obtener información del objetivo mediante el nuevo sistema de raycast
         Vector3 currentTargetPosition;
         if (GetCurrentTargetPosition(out currentTargetPosition))
         {
             RaycastHit hitInfo;
-            Vector3 rayOrigin = spellSpawnPoint.position;
-            Vector3 rayDirection = useUpwardRaycast ? spellSpawnPoint.up : spellSpawnPoint.forward;
+
+            // Usar el mismo origen y dirección que en GetCurrentTargetPosition
+            Transform actualOrigin = raycastOrigin != null ? raycastOrigin : spellSpawnPoint;
+            Vector3 rayOrigin = actualOrigin.position;
+
+            Transform rotationSource = (useRaycastOriginRotation && raycastOrigin != null) ? raycastOrigin : spellSpawnPoint;
+            Vector3 rayDirection = useUpwardRaycast ? rotationSource.up : rotationSource.forward;
 
             if (Physics.Raycast(rayOrigin, rayDirection, out hitInfo, maxRaycastDistance, raycastLayers))
             {
                 context.targetPosition = hitInfo.point;
                 context.targetNormal = hitInfo.normal;
                 context.hasValidTarget = true;
+
+                if (showTargetingDebug)
+                {
+                    Debug.Log($"[MagicStaff] Context created with valid target: {context.targetPosition}");
+                }
             }
             else
             {
@@ -808,22 +875,41 @@ public class MagicStaff : MonoBehaviour
         return context;
     }
 
+
     /// <summary>
     /// Obtiene la posición objetivo actual basada en el raycast
     /// </summary>
     private bool GetCurrentTargetPosition(out Vector3 targetPosition)
     {
         RaycastHit hitInfo;
-        Vector3 rayOrigin = spellSpawnPoint.position;
-        Vector3 rayDirection = useUpwardRaycast ? spellSpawnPoint.up : spellSpawnPoint.forward;
+
+        // NUEVO: Usar raycastOrigin si está configurado, sino usar spellSpawnPoint
+        Transform actualOrigin = raycastOrigin != null ? raycastOrigin : spellSpawnPoint;
+        Vector3 rayOrigin = actualOrigin.position;
+
+        // NUEVO: Decidir qué rotación usar para la dirección
+        Transform rotationSource = (useRaycastOriginRotation && raycastOrigin != null) ? raycastOrigin : spellSpawnPoint;
+        Vector3 rayDirection = useUpwardRaycast ? rotationSource.up : rotationSource.forward;
 
         if (Physics.Raycast(rayOrigin, rayDirection, out hitInfo, maxRaycastDistance, raycastLayers))
         {
             targetPosition = hitInfo.point;
+
+            if (showTargetingDebug)
+            {
+                Debug.Log($"[MagicStaff] Raycast hit: {hitInfo.collider.name} at {hitInfo.point}");
+            }
+
             return true;
         }
 
         targetPosition = rayOrigin + rayDirection * maxRaycastDistance;
+
+        if (showTargetingDebug)
+        {
+            Debug.Log($"[MagicStaff] Raycast miss, using max distance: {targetPosition}");
+        }
+
         return false;
     }
 
@@ -900,26 +986,13 @@ public class MagicStaff : MonoBehaviour
                         break;
 
                     case SpellCommandType.EMERGE:
+                        // Para hechizos que emergen, ejecutar automáticamente con gesto simulado hacia arriba
+                        ExecuteGestureTimeoutSpell(SpellCommandType.EMERGE, Vector3.up);
+                        break;
+
                     case SpellCommandType.DESCEND:
-                        // Para hechizos de gesto, ejecutar automáticamente si se permite fallback
-                        if (equippedSpell.AllowInstantFallback)
-                        {
-                            if (showCommandDebug)
-                            {
-                                Debug.Log($"[{Time.frameCount}] Ejecutando hechizo de gesto automáticamente por timeout");
-                            }
-                            currentContext.commandUsed = SpellCommandType.INSTANT;
-                            currentContext.commandIntensity = 1f; // Intensidad por defecto
-                            ExecuteSpellWithContext(currentContext);
-                        }
-                        else
-                        {
-                            if (showCommandDebug)
-                            {
-                                Debug.Log($"[{Time.frameCount}] Cancelando hechizo de gesto por timeout (no permite fallback)");
-                            }
-                            CancelPreparation();
-                        }
+                        // Para hechizos que descienden, ejecutar automáticamente con gesto simulado hacia abajo
+                        ExecuteGestureTimeoutSpell(SpellCommandType.DESCEND, Vector3.down);
                         break;
 
                     case SpellCommandType.INSTANT:
@@ -943,6 +1016,31 @@ public class MagicStaff : MonoBehaviour
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// NUEVO: Ejecuta un hechizo de gesto cuando se acaba el timeout
+    /// Simula el gesto con intensidad por defecto
+    /// </summary>
+    private void ExecuteGestureTimeoutSpell(SpellCommandType gestureType, Vector3 direction)
+    {
+        if (showCommandDebug)
+        {
+            Debug.Log($"[{Time.frameCount}] Ejecutando hechizo {gestureType} por timeout - gesto simulado");
+        }
+
+        // Actualizar contexto con información del gesto simulado
+        currentContext.commandUsed = gestureType;
+        currentContext.commandDirection = direction;
+        currentContext.commandIntensity = 0.7f; // Intensidad moderada porque no fue gesto real
+
+        if (showCommandDebug)
+        {
+            Debug.Log($"[{Time.frameCount}] Gesto simulado: {gestureType} con intensidad: {currentContext.commandIntensity}");
+        }
+
+        // Ejecutar el hechizo
+        ExecuteSpellWithContext(currentContext);
     }
 
     /// <summary>
@@ -1145,7 +1243,7 @@ public class MagicStaff : MonoBehaviour
             GUI.Label(new Rect(10, y, 500, 20), $"Comando requerido: {equippedSpell.CommandType}");
             y += 20;
 
-            // Mostrar timeout
+            // Mostrar timeout para todos los tipos
             if (equippedSpell.CommandTimeout > 0)
             {
                 float remainingTime = equippedSpell.CommandTimeout - (Time.time - preparationStartTime);
@@ -1153,39 +1251,86 @@ public class MagicStaff : MonoBehaviour
                 y += 20;
             }
 
-            if (equippedSpell.CommandType == SpellCommandType.DIRECTIONAL)
+            // Información específica por tipo de comando
+            switch (equippedSpell.CommandType)
             {
-                GUI.Label(new Rect(10, y, 500, 20), $"Targeting: {isTargeting}");
+                case SpellCommandType.DIRECTIONAL:
+                    GUI.Label(new Rect(10, y, 500, 20), $"Targeting: {isTargeting}");
+                    y += 20;
+                    if (isTargeting)
+                    {
+                        float progress = (Time.time - targetingStartTime) / equippedSpell.AimHoldTime;
+                        GUI.Label(new Rect(10, y, 500, 20), $"Progreso targeting PRECISO: {progress:F2}");
+                        y += 20;
+                    }
+                    else
+                    {
+                        GUI.Label(new Rect(10, y, 500, 20), $"Al timeout → Disparo automático hacia donde apunte");
+                        y += 20;
+                    }
+
+                    // Mostrar si hay efecto de preparación activo
+                    if (preparationEffect != null)
+                    {
+                        GUI.Label(new Rect(10, y, 500, 20), $"Proyectil flotando en: {preparationEffect.transform.position}");
+                        y += 20;
+                    }
+                    break;
+
+                case SpellCommandType.EMERGE:
+                    GUI.Label(new Rect(10, y, 500, 20), $"Esperando gesto HACIA ARRIBA");
+                    y += 20;
+                    GUI.Label(new Rect(10, y, 500, 20), $"Al timeout → Emerge automáticamente");
+                    y += 20;
+                    break;
+
+                case SpellCommandType.DESCEND:
+                    GUI.Label(new Rect(10, y, 500, 20), $"Esperando gesto HACIA ABAJO");
+                    y += 20;
+                    GUI.Label(new Rect(10, y, 500, 20), $"Al timeout → Desciende automáticamente");
+                    y += 20;
+                    break;
+
+                case SpellCommandType.INSTANT:
+                    GUI.Label(new Rect(10, y, 500, 20), $"¡Hechizo instantáneo ejecutándose!");
+                    y += 20;
+                    break;
+            }
+
+            // Mostrar velocidad actual del controlador para debugging de gestos
+            if (chargingController != null &&
+                (equippedSpell.CommandType == SpellCommandType.EMERGE || equippedSpell.CommandType == SpellCommandType.DESCEND))
+            {
+                Vector3 currentVelocity = (chargingController.transform.position - lastControllerPosition) / Time.deltaTime;
+                GUI.Label(new Rect(10, y, 500, 20), $"Velocidad controlador Y: {currentVelocity.y:F2} (mín: ±{gestureMinSpeed})");
                 y += 20;
-                if (isTargeting)
-                {
-                    float progress = (Time.time - targetingStartTime) / equippedSpell.AimHoldTime;
-                    GUI.Label(new Rect(10, y, 500, 20), $"Progreso targeting PRECISO: {progress:F2}");
-                    y += 20;
-                }
-                else
-                {
-                    GUI.Label(new Rect(10, y, 500, 20), $"Al timeout → Disparo automático hacia donde apunte");
-                    y += 20;
-                }
             }
         }
 #endif
     }
 
     /// <summary>
-    /// MODIFICADO: Visualización del raycast hacia arriba
+    /// Visualización del raycast hacia arriba
     /// </summary>
     private void OnDrawGizmos()
     {
-        if (!showTargetingDebug || spellSpawnPoint == null) return;
+        if (!showTargetingDebug) return;
 
-        Vector3 rayOrigin = spellSpawnPoint.position;
-        Vector3 rayDirection = useUpwardRaycast ? spellSpawnPoint.up : spellSpawnPoint.forward;
+        // Usar el origen configurable para la visualización
+        Transform actualOrigin = raycastOrigin != null ? raycastOrigin : spellSpawnPoint;
+        if (actualOrigin == null) return;
+
+        Vector3 rayOrigin = actualOrigin.position;
+
+        Transform rotationSource = (useRaycastOriginRotation && raycastOrigin != null) ? raycastOrigin : spellSpawnPoint;
+        if (rotationSource == null) return;
+
+        Vector3 rayDirection = useUpwardRaycast ? rotationSource.up : rotationSource.forward;
 
         RaycastHit hitInfo;
         if (Physics.Raycast(rayOrigin, rayDirection, out hitInfo, maxRaycastDistance, raycastLayers))
         {
+            // Impacto encontrado
             Gizmos.color = Color.green;
             Gizmos.DrawLine(rayOrigin, hitInfo.point);
 
@@ -1195,7 +1340,7 @@ public class MagicStaff : MonoBehaviour
             Gizmos.color = Color.blue;
             Gizmos.DrawLine(hitInfo.point, hitInfo.point + hitInfo.normal * 0.5f);
 
-            // NUEVO: Visualizar área de tolerancia para targeting
+            // Visualizar área de tolerancia para targeting
             if (currentState == SpellState.PREPARED && equippedSpell != null &&
                 equippedSpell.CommandType == SpellCommandType.DIRECTIONAL && isTargeting)
             {
@@ -1205,10 +1350,24 @@ public class MagicStaff : MonoBehaviour
         }
         else
         {
+            // Sin impacto
             Gizmos.color = Color.gray;
             Gizmos.DrawLine(rayOrigin, rayOrigin + rayDirection * maxRaycastDistance);
         }
+
+        // Mostrar el origen del raycast con un ícono especial
+        Gizmos.color = Color.cyan;
+        Gizmos.DrawWireSphere(rayOrigin, 0.05f);
+
+        // Mostrar diferencia entre origen del raycast y spawn point si son diferentes
+        if (raycastOrigin != null && raycastOrigin != spellSpawnPoint)
+        {
+            Gizmos.color = Color.magenta;
+            Gizmos.DrawLine(spellSpawnPoint.position, raycastOrigin.position);
+            Gizmos.DrawWireSphere(spellSpawnPoint.position, 0.03f); // Spawn point más pequeño
+        }
     }
+
 
     #endregion
 }

@@ -79,62 +79,54 @@ public class FireballSpell : SpellBase
     }
 
     /// <summary>
-    /// Calcula la dirección de lanzamiento según el origen y comando
+    /// Calcula la dirección de lanzamiento según el tipo de origen
     /// </summary>
     private Vector3 GetLaunchDirection(OriginData origin, SpellCastContext context)
     {
-        switch (context.commandUsed)
+        switch (OriginConfig.originType)
         {
-            case SpellCommandType.DIRECTIONAL:
-                // El jugador apuntó específicamente - usar esa dirección
+            case SpellOriginType.STAFF_TIP:
+                // CORREGIDO: Dirigir hacia el punto objetivo si hay targeting válido
+                if (context.hasValidTarget && context.commandUsed == SpellCommandType.DIRECTIONAL)
+                {
+                    // Calcular dirección desde el origen hacia el punto objetivo
+                    Vector3 directionToTarget = (context.targetPosition - origin.position).normalized;
+
+                    return directionToTarget;
+                }
+                else
+                {
+                    // Fallback: usar la dirección del bastón si no hay targeting válido
+                    return origin.rotation * Vector3.forward;
+                }
+
+            case SpellOriginType.PLAYER_CENTER:
+            case SpellOriginType.PLAYER_FRONT:
+                // Desde el jugador hacia el objetivo
                 if (context.hasValidTarget)
                 {
                     return (context.targetPosition - origin.position).normalized;
                 }
                 else
                 {
-                    return context.commandDirection;
+                    return context.playerTransform.forward;
                 }
 
-            case SpellCommandType.INSTANT:
-                // Lanzamiento instantáneo - usar la configuración de origen
-                switch (OriginConfig.originType)
-                {
-                    case SpellOriginType.STAFF_TIP:
-                        return origin.rotation * Vector3.forward;
+            case SpellOriginType.TARGET_ABOVE:
+                // Desde arriba hacia abajo
+                return Vector3.down;
 
-                    case SpellOriginType.PLAYER_CENTER:
-                    case SpellOriginType.PLAYER_FRONT:
-                        if (context.hasValidTarget)
-                        {
-                            return (context.targetPosition - origin.position).normalized;
-                        }
-                        else
-                        {
-                            return context.playerTransform.forward;
-                        }
-
-                    case SpellOriginType.TARGET_ABOVE:
-                        return Vector3.down;
-
-                    case SpellOriginType.TARGET_POINT:
-                    case SpellOriginType.TARGET_SURFACE:
-                        // Para estas posiciones, explotar in-situ
-                        return Vector3.up * 0.1f;
-
-                    default:
-                        return origin.rotation * Vector3.forward;
-                }
-
-            case SpellCommandType.EMERGE:
-                // Desde el suelo hacia arriba - usar dirección del gesto
-                return context.commandDirection;
-
-            case SpellCommandType.DESCEND:
-                // Desde arriba hacia abajo - usar dirección del gesto
-                return context.commandDirection;
+            case SpellOriginType.TARGET_POINT:
+            case SpellOriginType.TARGET_SURFACE:
+                // Explotar en el lugar (velocidad cero o mínima)
+                return Vector3.up * 0.1f;
 
             default:
+                // Para otros tipos, dirigir hacia el objetivo si existe
+                if (context.hasValidTarget)
+                {
+                    return (context.targetPosition - origin.position).normalized;
+                }
                 return origin.rotation * Vector3.forward;
         }
     }
