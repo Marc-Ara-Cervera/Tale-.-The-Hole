@@ -32,15 +32,119 @@ MonoBehaviour:
   minimumGestureSpeed: 2.5
   manaCost: 20
   cooldownTime: 5
-  minChargeTime: 2
+  minChargeTime: 5
+  allowScaling: 1
+  primaryProperty: 1
+  primaryPropertyBaseValue: 25
+  secondaryProperty: 0
+  secondaryPropertyBaseValue: 0
+  minScale: 0.3
+  maxScale: 3.5
+  optimalScaleThreshold: 2
+  primaryPropertyCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0.5
+      value: 1.5
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 4
+      value: 0.3
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  secondaryPropertyCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0.5
+      value: 1.2
+      inSlope: 0
+      outSlope: -0.14285716
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 4
+      value: 0.7
+      inSlope: -0.14285716
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  speedCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0.5
+      value: 1.3
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 4
+      value: 0.4
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  manaCostCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0.5
+      value: 0.8
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 4
+      value: 2.5
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  scalingSmoothingFactor: 0.15
   spellPrefab: {fileID: 7453050466094432560, guid: 7beb44185ac13f5458de0a21477f2e7e,
     type: 3}
   castSound: {fileID: 0}
   chargingEffectPrefab: {fileID: 0}
   cancelEffectPrefab: {fileID: 0}
   magicCircles: []
-  projectileSpeed: 10
-  damage: 25
-  explosionRadius: 3
+  baseProjectileSpeed: 15
+  baseExplosionRadius: 3
   directionalSpeedBonus: 2
   gestureIntensityDamageMultiplier: 0.2
