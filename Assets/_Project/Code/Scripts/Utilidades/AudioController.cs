@@ -72,6 +72,7 @@ public class AudioController : MonoBehaviour
         {
             GameObject audioSourceObj = new GameObject($"AudioSource_Pool_{i}");
             audioSourceObj.transform.SetParent(transform);
+            audioSourceObj.transform.SetLocalPositionAndRotation(new Vector3(0,0,0), new Quaternion(0,0,0,0));
 
             AudioSource source = audioSourceObj.AddComponent<AudioSource>();
             source.playOnAwake = false;

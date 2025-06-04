@@ -1,8 +1,80 @@
 using UnityEngine;
 
 /// <summary>
-/// Ejemplo de hechizo de bola de fuego usando el nuevo sistema de escalado
-/// Demuestra cómo integrar las propiedades escalables con el comportamiento del hechizo
+/// Proyectil simple para la bola de fuego que usa el nuevo sistema de explosiones
+/// </summary>
+public class FireballProjectileSimple : MonoBehaviour
+{
+    private float damage;
+    private float explosionRadius;
+    private GameObject explosionPrefab;
+    private GameObject instigator;
+    private bool hasExploded = false;
+
+    public void Initialize(float projectileDamage, float radius, GameObject explosion, GameObject caster)
+    {
+        damage = projectileDamage;
+        explosionRadius = radius;
+        explosionPrefab = explosion;
+        instigator = caster;
+    }
+
+    private void OnTriggerEnter(Collider other)
+    {
+        if (hasExploded) return;
+        if (other.CompareTag("Player")) return;
+
+        Explode(other.gameObject);
+    }
+
+    private void OnCollisionEnter(Collision collision)
+    {
+        if (hasExploded) return;
+        if (collision.gameObject.CompareTag("Player")) return;
+
+        Explode(collision.gameObject);
+    }
+
+    private void Explode(GameObject hitTarget)
+    {
+        hasExploded = true;
+
+        // Crear la explosión
+        if (explosionPrefab != null)
+        {
+            GameObject explosionObj = Instantiate(explosionPrefab, transform.position, Quaternion.identity);
+
+            // Configurar la explosión
+            Explosion explosion = explosionObj.GetComponent<Explosion>();
+            if (explosion != null)
+            {
+                // Crear fuente de explosión con el objetivo impactado excluido
+                ExplosionSource source = new ExplosionSource(instigator, damage, DamageType.Fire);
+
+                // Si impactamos directamente a un enemigo, aplicar daño directo primero
+                iDañable directTarget = hitTarget.GetComponent<iDañable>();
+                if (directTarget != null)
+                {
+                    // Aplicar daño directo al impacto (100% del daño)
+                    directTarget.TakeDamage(damage, instigator);
+
+                    // Excluir este objetivo de la explosión para evitar doble daño
+                    source.excludeTargets.Add(hitTarget);
+                }
+
+                // Configurar e inicializar la explosión
+                explosion.SetExplosionRadius(explosionRadius);
+                explosion.Initialize(source);
+            }
+        }
+
+        // Destruir el proyectil
+        Destroy(gameObject);
+    }
+}
+
+/// <summary>
+/// Hechizo de bola de fuego actualizado con el nuevo sistema de explosiones
 /// </summary>
 [CreateAssetMenu(fileName = "Fireball Spell", menuName = "Spells/Fire/Fireball")]
 public class FireballSpell : SpellBase
@@ -11,56 +83,51 @@ public class FireballSpell : SpellBase
     [SerializeField] private float baseProjectileSpeed = 15f;
     [SerializeField] private float baseExplosionRadius = 3f;
 
+    [Header("Prefabs de Explosión")]
+    [SerializeField, Tooltip("Prefab de la explosión que se creará al impactar")]
+    private GameObject explosionPrefab;
+
     [Header("Configuración Específica por Comando")]
-    [Tooltip("Velocidad adicional cuando se usa comando DIRECTIONAL (por intensidad del targeting)")]
+    [Tooltip("Velocidad adicional cuando se usa comando DIRECTIONAL")]
     [SerializeField] private float directionalSpeedBonus = 5f;
 
     [Tooltip("Multiplicador de daño cuando se usa gesto rápido")]
     [SerializeField] private float gestureIntensityDamageMultiplier = 0.2f;
 
-    /// <summary>
-    /// Implementación específica del efecto de bola de fuego con sistema de escalado
-    /// NUEVO: Ahora recibe información de escalado para modificar las propiedades
-    /// </summary>
+    [Tooltip("Bonus de radio de explosión por escala")]
+    [SerializeField] private AnimationCurve explosionRadiusCurve = AnimationCurve.Linear(0.5f, 0.5f, 4f, 4f);
+
     protected override void ExecuteSpellEffect(OriginData origin, SpellCastContext context)
     {
-        // NUEVO: Obtener información de escalado del contexto (si existe)
-        float currentScale = context.spellScale; // Nuevo campo que añadiremos al context
+        float currentScale = context.spellScale;
         SpellScalingResult scalingResult = CalculateScaledProperties(currentScale);
 
         Debug.Log($"Lanzando Fireball escalada {currentScale:F1}x desde {OriginConfig.originType} con comando {context.commandUsed}");
-        Debug.Log($"Propiedades escaladas - Daño: {scalingResult.primaryPropertyValue:F1}, Velocidad: {scalingResult.speedMultiplier:F2}x");
 
-        // Instanciar el proyectil en la posición calculada automáticamente
         if (spellPrefab != null)
         {
             GameObject fireball = Instantiate(spellPrefab, origin.position, origin.rotation);
 
-            // NUEVO: Aplicar escalado visual al proyectil
+            // Aplicar escalado visual
             ApplyVisualScaling(fireball, currentScale);
 
-            // Configurar el proyectil según el comando usado Y la escala
+            // Configurar el proyectil
             ConfigureProjectileWithScaling(fireball, origin, context, scalingResult);
 
-            // Destruir después de 10 segundos para evitar acumulación
+            // Auto-destruir después de 10 segundos
             Destroy(fireball, 10f);
         }
         else
         {
-            // Fallback si no hay prefab - crear efecto básico
-            Debug.Log($"¡FIREBALL ESCALADA {currentScale:F1}x! Desde {origin.position} (Sin prefab configurado)");
+            Debug.LogError("[FireballSpell] No hay prefab de proyectil configurado");
         }
     }
 
-    /// <summary>
-    /// NUEVO: Aplica escalado visual al proyectil
-    /// </summary>
     private void ApplyVisualScaling(GameObject fireball, float scale)
     {
-        // Escalar el tamaño visual del proyectil
         fireball.transform.localScale = Vector3.one * scale;
 
-        // Opcional: Ajustar intensidad de efectos de partículas
+        // Escalar efectos de partículas
         ParticleSystem[] particles = fireball.GetComponentsInChildren<ParticleSystem>();
         foreach (ParticleSystem ps in particles)
         {
@@ -72,157 +139,130 @@ public class FireballSpell : SpellBase
         }
     }
 
-    /// <summary>
-    /// Configura el proyectil según el contexto, comando usado Y escalado aplicado
-    /// ACTUALIZADO: Ahora incorpora las propiedades escaladas
-    /// </summary>
     private void ConfigureProjectileWithScaling(GameObject fireball, OriginData origin, SpellCastContext context, SpellScalingResult scalingResult)
     {
-        // Configurar física del proyectil
+        // Configurar física
         Rigidbody rb = fireball.GetComponent<Rigidbody>();
-        if (rb != null)
+        if (rb == null)
         {
-            Vector3 launchDirection = GetLaunchDirection(origin, context);
-            float finalSpeed = GetLaunchSpeedWithScaling(context, scalingResult);
-
-            rb.velocity = launchDirection * finalSpeed;
-
-            Debug.Log($"Fireball lanzada: Dirección={launchDirection}, Velocidad={finalSpeed} (base: {baseProjectileSpeed}, escalado: {scalingResult.speedMultiplier:F2}x)");
+            rb = fireball.AddComponent<Rigidbody>();
+            rb.useGravity = false;
         }
 
-        // Configurar componente de daño con escalado
-        FireballProjectile projectileComponent = fireball.GetComponent<FireballProjectile>();
-        if (projectileComponent == null)
+        // Configurar collider si no existe
+        Collider col = fireball.GetComponent<Collider>();
+        if (col == null)
         {
-            projectileComponent = fireball.AddComponent<FireballProjectile>();
+            SphereCollider sphereCol = fireball.AddComponent<SphereCollider>();
+            sphereCol.isTrigger = true;
+            sphereCol.radius = 0.2f * context.spellScale;
         }
 
-        if (projectileComponent != null)
+        // Aplicar velocidad
+        Vector3 launchDirection = GetLaunchDirection(origin, context);
+        float finalSpeed = GetLaunchSpeedWithScaling(context, scalingResult);
+        rb.velocity = launchDirection * finalSpeed;
+
+        // Configurar componente de proyectil
+        FireballProjectileSimple projectile = fireball.GetComponent<FireballProjectileSimple>();
+        if (projectile == null)
         {
-            float finalDamage = GetFinalDamageWithScaling(context, scalingResult);
-            float finalRadius = GetFinalRadiusWithScaling(context.spellScale);
-
-            projectileComponent.Initialize(finalDamage, finalRadius);
-
-            Debug.Log($"Fireball configurada: Daño={finalDamage:F1} (escalado: {scalingResult.primaryPropertyValue:F1}), Radio={finalRadius:F1}");
+            projectile = fireball.AddComponent<FireballProjectileSimple>();
         }
+
+        // Calcular valores finales
+        float finalDamage = GetFinalDamageWithScaling(context, scalingResult);
+        float finalRadius = GetFinalRadiusWithScaling(context.spellScale);
+
+        // Inicializar el proyectil
+        GameObject caster = context.caster != null ? context.caster.gameObject : null;
+        projectile.Initialize(finalDamage, finalRadius, explosionPrefab, caster);
+
+        Debug.Log($"Fireball configurada: Daño={finalDamage:F1}, Radio={finalRadius:F1}m, Velocidad={finalSpeed:F1}m/s");
     }
 
-    /// <summary>
-    /// Calcula la velocidad final incluyendo escalado
-    /// ACTUALIZADO: Incorpora el multiplicador de velocidad escalado
-    /// </summary>
     private float GetLaunchSpeedWithScaling(SpellCastContext context, SpellScalingResult scalingResult)
     {
-        float baseSpeed = baseProjectileSpeed * scalingResult.speedMultiplier; // NUEVO: Aplicar escalado de velocidad
+        float baseSpeed = baseProjectileSpeed * scalingResult.speedMultiplier;
 
         switch (context.commandUsed)
         {
             case SpellCommandType.DIRECTIONAL:
-                // Distinguir entre targeting preciso vs timeout
                 if (context.commandIntensity >= 1f)
                 {
-                    // Targeting preciso completado - bonus completo
                     baseSpeed += directionalSpeedBonus;
-                    Debug.Log("Targeting preciso completado - velocidad máxima");
                 }
                 else
                 {
-                    // Disparo por timeout - bonus reducido
                     baseSpeed += directionalSpeedBonus * context.commandIntensity;
-                    Debug.Log($"Disparo por timeout - velocidad reducida (intensidad: {context.commandIntensity})");
                 }
                 break;
 
             case SpellCommandType.EMERGE:
             case SpellCommandType.DESCEND:
-                // Velocidad basada en la intensidad del gesto
                 float intensityMultiplier = Mathf.Clamp(context.commandIntensity / 3f, 0.5f, 2f);
                 baseSpeed *= intensityMultiplier;
-                break;
-
-            case SpellCommandType.INSTANT:
-                // Velocidad base sin modificaciones adicionales
                 break;
         }
 
         return baseSpeed;
     }
 
-    /// <summary>
-    /// Calcula el daño final incluyendo escalado
-    /// ACTUALIZADO: Usa la propiedad principal escalada como base
-    /// </summary>
     private float GetFinalDamageWithScaling(SpellCastContext context, SpellScalingResult scalingResult)
     {
-        float baseDamage = scalingResult.primaryPropertyValue; // NUEVO: Usar valor escalado como base
+        float baseDamage = scalingResult.primaryPropertyValue;
 
         switch (context.commandUsed)
         {
             case SpellCommandType.DIRECTIONAL:
-                // Distinguir entre targeting preciso vs timeout
                 if (context.commandIntensity >= 1f)
                 {
-                    // Targeting preciso completado - bonus completo
-                    baseDamage *= 1.1f;
-                    Debug.Log("Targeting preciso - daño aumentado");
+                    baseDamage *= 1.1f; // Bonus por precisión
                 }
                 else
                 {
-                    // Disparo por timeout - sin bonus (o pequeño penalty)
-                    baseDamage *= 0.95f;
-                    Debug.Log($"Disparo por timeout - daño ligeramente reducido");
+                    baseDamage *= 0.95f; // Penalización por timeout
                 }
                 break;
 
             case SpellCommandType.EMERGE:
             case SpellCommandType.DESCEND:
-                // Daño basado en la intensidad del gesto
                 float intensityBonus = context.commandIntensity * gestureIntensityDamageMultiplier;
                 baseDamage += intensityBonus;
-                break;
-
-            case SpellCommandType.INSTANT:
-                // Daño base sin modificaciones adicionales
                 break;
         }
 
         return baseDamage;
     }
 
-    /// <summary>
-    /// NUEVO: Calcula el radio de explosión final basado en la escala
-    /// </summary>
     private float GetFinalRadiusWithScaling(float scale)
     {
-        // El radio escala directamente con la escala visual del hechizo
+        // El radio escala con una curva personalizable
+        if (explosionRadiusCurve != null && explosionRadiusCurve.length > 0)
+        {
+            return baseExplosionRadius * explosionRadiusCurve.Evaluate(scale);
+        }
+
+        // Fallback: escalado lineal
         return baseExplosionRadius * scale;
     }
 
-    /// <summary>
-    /// Método existente sin cambios (mantiene compatibilidad)
-    /// </summary>
     private Vector3 GetLaunchDirection(OriginData origin, SpellCastContext context)
     {
         switch (OriginConfig.originType)
         {
             case SpellOriginType.STAFF_TIP:
-                // CORREGIDO: Dirigir hacia el punto objetivo si hay targeting válido
                 if (context.hasValidTarget && context.commandUsed == SpellCommandType.DIRECTIONAL)
                 {
-                    // Calcular dirección desde el origen hacia el punto objetivo
-                    Vector3 directionToTarget = (context.targetPosition - origin.position).normalized;
-                    return directionToTarget;
+                    return (context.targetPosition - origin.position).normalized;
                 }
                 else
                 {
-                    // Fallback: usar la dirección del bastón si no hay targeting válido
                     return origin.rotation * Vector3.forward;
                 }
 
             case SpellOriginType.PLAYER_CENTER:
             case SpellOriginType.PLAYER_FRONT:
-                // Desde el jugador hacia el objetivo
                 if (context.hasValidTarget)
                 {
                     return (context.targetPosition - origin.position).normalized;
@@ -233,16 +273,13 @@ public class FireballSpell : SpellBase
                 }
 
             case SpellOriginType.TARGET_ABOVE:
-                // Desde arriba hacia abajo
                 return Vector3.down;
 
             case SpellOriginType.TARGET_POINT:
             case SpellOriginType.TARGET_SURFACE:
-                // Explotar en el lugar (velocidad cero o mínima)
-                return Vector3.up * 0.1f;
+                return Vector3.up * 0.1f; // Velocidad mínima
 
             default:
-                // Para otros tipos, dirigir hacia el objetivo si existe
                 if (context.hasValidTarget)
                 {
                     return (context.targetPosition - origin.position).normalized;

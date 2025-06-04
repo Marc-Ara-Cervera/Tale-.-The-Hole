@@ -385,7 +385,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: af6bf904e410ee8479f9093d8830d1f8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_LocomotionProvider: {fileID: 0}
+  m_LocomotionProvider: {fileID: 65426927}
   m_MinHeight: 0.1
   m_MaxHeight: Infinity
 --- !u!114 &65426926
@@ -6446,11 +6446,6 @@ PrefabInstance:
       propertyPath: m_Name
       value: Mix_CajaMadera
       objectReference: {fileID: 0}
-    - target: {fileID: 7062624333054697532, guid: 3b4dcc90ad040a943b866eb2810fecec,
-        type: 3}
-      propertyPath: m_Layer
-      value: 3
-      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -7057,6 +7052,12 @@ PrefabInstance:
       propertyPath: m_InteractionManager
       value: 
       objectReference: {fileID: 544973833}
+    - target: {fileID: 9073460615158425970, guid: a99a2e12f1174904aa0097338b1f2a7f,
+        type: 3}
+      propertyPath: equippedSpell
+      value: 
+      objectReference: {fileID: 11400000, guid: 5eba39aa8fef7f6459aa1542331a8475,
+        type: 2}
     - target: {fileID: 9073460615158425970, guid: a99a2e12f1174904aa0097338b1f2a7f,
         type: 3}
       propertyPath: maxScalingDistance

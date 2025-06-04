@@ -32,7 +32,7 @@ MonoBehaviour:
   minimumGestureSpeed: 2.5
   manaCost: 20
   cooldownTime: 5
-  minChargeTime: 5
+  minChargeTime: 3
   allowScaling: 1
   primaryProperty: 1
   primaryPropertyBaseValue: 25
@@ -41,6 +41,7 @@ MonoBehaviour:
   minScale: 0.3
   maxScale: 3.5
   optimalScaleThreshold: 2
+  scalingSmoothingFactor: 0.15
   primaryPropertyCurve:
     serializedVersion: 2
     m_Curve:
@@ -137,7 +138,6 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  scalingSmoothingFactor: 0.15
   spellPrefab: {fileID: 7453050466094432560, guid: 7beb44185ac13f5458de0a21477f2e7e,
     type: 3}
   castSound: {fileID: 0}
@@ -146,5 +146,31 @@ MonoBehaviour:
   magicCircles: []
   baseProjectileSpeed: 15
   baseExplosionRadius: 3
+  explosionPrefab: {fileID: 213443936634109986, guid: d3f80766c1ae35e4cad3e0b505a636e3,
+    type: 3}
   directionalSpeedBonus: 2
   gestureIntensityDamageMultiplier: 0.2
+  explosionRadiusCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0.5
+      value: 0.5
+      inSlope: 0
+      outSlope: 1
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 4
+      value: 4
+      inSlope: 1
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4

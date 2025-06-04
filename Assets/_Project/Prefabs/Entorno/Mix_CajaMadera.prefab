@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 2095240356487600414}
   - component: {fileID: 6592492111832295003}
   - component: {fileID: 4055526569166774439}
-  m_Layer: 0
+  m_Layer: 3
   m_Name: Mix_CajaMadera
   m_TagString: Untagged
   m_Icon: {fileID: 0}
